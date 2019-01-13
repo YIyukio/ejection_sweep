@@ -1,0 +1,1914 @@
+---
+title: "Analysis and Making plot for paper"
+author: "Inoue Yukio"
+date: "`r Sys.time()`"
+output:
+  pdf_document: 
+    latex_engine: xelatex
+    includes:
+      in_header: ["preamble.tex"]
+subtile: 小型回流水槽を用いた光合成実験
+geometry: top=2cm, bottom=2cm, left=3cm, right=2cm
+---
+
+```{r, echo = FALSE}
+rm(list=ls()) #Environmentを全てリセット。なぜかリセットしないと図が更新されない。->解決。キャッシュの問題
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, out.width = "90%", fig.align = "center", cache=F,#キャッシュの有無、Tにしてると図の上書き保存ができない。
+                      fig.pos="H", fig.showtext = TRUE, message = FALSE, warning = FALSE)
+options(scipen=100)　#数値の表記を指数表記になるのを防ぐ
+```
+
+### 必要パッケージの読み込み
+```{r, message=F}
+library(tidyverse)
+library(marelac)
+library(lubridate)
+library(readxl)
+library(showtext)
+library(flextable)
+library(marelac)
+library(grid)
+library(formattable)
+library(DT) #DataTableパッケージ
+```
+
+```{r, include=FALSE}
+#流速データは大きく、knitに時間がかかるため、一度実行した保存したデータを使用する。
+#保存したデータの読み込みと、流速のコードの再実行するかどうかの理論値
+
+Redo = F #データの再編集の有無
+Read_data = Redo == FALSE
+Redo_fg = F #再作図の有無
+Redo_stan = T #stan実行の有無
+Read_stan = Redo_stan == F　#Stanの保存されたデータの読み込み
+Redo_stan_fg = T #stan再作図の有無
+```
+
+```{r, include=FALSE, eval = Read_data}
+vector_all = read_csv("../回流水槽光合成実験5/Modified_Data/vector_all.csv")[-1]
+```
+
+## 小型回流水槽実験の目的
+　キャノピー構造を保持した状態で、海藻の光合成速度は、受ける流速によってどのように応答するか検証する。これまでの研究では、海藻の一部分を用いた研究が主流であったが、キャノピー構造は海水の流動と相互作用し、海藻への栄養塩の供給量に影響を及ぼしている可能性がある。そのため、キャノピー構造を有する場合、海藻の一部分を用いた結果と異なる可能性がある。  
+  
+　本研究では、  
+　（1）キャノピー構造がキャノピー内の流速にどのように影響しているのか？  
+　（2）キャノピー構造を有する場合、海藻の光合成速度は、流速に対してどのように応答するのか？  
+　（3）その応答の要因は、キャノピーによって影響を受けた海水の流動によるものなのか？  
+  
+　を明らかにすることを目的とする。
+
+## 実験方法
+```{r, include=FALSE}
+#湿重量と海藻体積の追加
+WW_volume = data.frame(Density = c("High", "Middle", "Low"),
+                    WW_sum = c(453.4, 238.5, 153.8), #wwg
+                    Seaweed_volume_m3 = c(630, 227, 175)/1000/1000) #ml -> m^3 海藻の体積
+```
+
+* 小型回流水槽（40 cm &times; 30 cm &times; 120 cm, V = 200 L）
+* モデル海藻：ヨレモク（*Sargassum siliquastrum*）
+* 厚さ5 mm のゴム板を回流水槽観測部に敷き詰め、その上に海藻を用いてキャノピーを形成。
+* 水位は30 cm。
+* キャノピーは、ヨレモクの上部から12 cm を切り取った部位を用いて、密度を３条件（）とした。
+* それぞれの密度の海藻の湿重量は
+`r WW_volume$WW_sum[1]`, `r WW_volume$WW_sum[2]`, `r WW_volume$WW_sum[3]`、
+また体積は
+`r WW_volume$Seaweed_volume_m3[1]`, `r WW_volume$Seaweed_volume_m3[2]`, `r WW_volume$Seaweed_volume_m3[3]`であった。
+* 流速条件(Hz)は、0.5, 1, 2, 4, 6, 8, 10, 15 Hzとした。 
+  
+#### 光合成実験
+* 小型回流水槽に暗幕をし、明条件1h, 暗条件2hとした。
+* 密度条件ごとに個体を変えた（流速条件では同じ）
+* 実験開始前に、海水のDOを窒素ガスでばっ気することで、90%近くまで下げた。
+* 光合成実験の際には、海水の空気中の酸素ガスの交換が発生する。そのため、ガス交換速度を流速条件ごとに算出し、補正した。
+
+#### 流速測定実験
+* 流速はドップラー流速計（サンプリング間隔：200Hz、測定時間：3分）を用いて測定した。
+* 測定位置は、藻場の直前、leading edgeから15 cm, 45 cm, 藻場直後とし、測定深度は、底面から6 cm, 藻場上部の境界（流速、密度によって異なる）、16 cmとした。
+
+#### キャノピーの形状変化の測定
+* キャノピーの流速による形状変化は、キャノピーの横方向からの投影面積で表現した。
+* カメラで流速ごとに撮影し、imagejを用いて面積を算出した。
+
+#### 光量の測定
+* 光量は約800$\mu mol \: photons \: m^{-2}\:s^{-1}$の一定。
+* 藻場底面の流速、密度ごとの光量は、ペンダントロガーにて測定（lux）
+
+\pagebreak
+
+## 溶存酸素濃度の補正と総光合成速度の算出
+### 溶存酸素濃度の生データの確認
+```{r, echo = F, results = "hold"}
+## データの読み込み----------------------------------------------------------------------
+fname = dir("../回流水槽光合成実験5/Data/DO/", pattern = "csv", full = T)
+ID = read_csv(grep(x = fname, pattern = "ID", value = T))
+Trident = read_csv(grep(x = fname, pattern = "KorDSS", value = T), skip = 5,locale=locale(encoding="sjis"))
+
+Trident = Trident %>%
+  tidyr::unite(DATE, TIME, col = "Time", sep = " ") %>% 
+  select(Time, Barometer = 6, DO = 8, Temp = 9, Sal = 12) %>% 
+  mutate(Time = as.POSIXct(Time), Date = as.POSIXct(round(Time, "mins")))
+
+#データに実験条件の情報を追加:IDのファイルを結合-----------------------------------------
+Time_ID = ID %>% 
+  select(ID, Hz, Density, Light, starttime = Exp_start_time, endtime = Exp_end_time) %>%
+  mutate_at(.vars = c("starttime", "endtime"), .funs = as.POSIXct) %>% 
+  arrange(starttime, endtime, Light) %>% 
+  select(ID, Hz, Density, Light, starttime, endtime)
+
+#再測定をしたので、必要のないダブリを削除
+Time_ID = Time_ID %>%
+  filter(!Density %in% c("High") | !ID %in% c(5,6,1,2,9,10)) %>% 
+  filter(!Density %in% c("Low") | !ID %in% c()) %>% 
+  filter(!Density %in% c("Middle") | !ID %in% c()) 
+  
+Trident$Hz = NA
+Trident$Light = NA
+Trident$Density = NA
+Trident$ID = NA
+
+removetime = 900 #s 初めの切り取り時間
+for (i in 1:nrow(Time_ID)) {
+
+  Trident[Trident$Time >= Time_ID$starttime[i]+ removetime &
+                       Trident$Time <= Time_ID$endtime[i], "Hz"] = Time_ID$Hz[i]
+  Trident[Trident$Time >= Time_ID$starttime[i]+ removetime &
+                       Trident$Time <= Time_ID$endtime[i], "Light"] = Time_ID$Light[i]
+  Trident[Trident$Time >= Time_ID$starttime[i]+ removetime &
+            Trident$Time <= Time_ID$endtime[i], "Density"] = as.character(Time_ID$Density[i])
+  Trident[Trident$Time >= Time_ID$starttime[i]+ removetime &
+            Trident$Time <= Time_ID$endtime[i], "ID"] = Time_ID$ID[i]
+}
+
+used_time = 40#min #データは経過時間が40分以下のみ使用
+Trident = Trident %>%
+  filter(!Hz == is.na(Hz)) %>% 
+  group_by(Hz, Light, Density) %>%
+  arrange(Density, Hz, Light, Time) %>% 
+  mutate(Elapsed_time = as.integer((Date - min(Date)))/60) %>%　#min 
+  filter(Elapsed_time <= used_time) %>%                                                  
+  select(ID, Hz, Light, Elapsed_time, Density, DO, Temp, Barometer, Sal)
+
+
+#湿重量と海藻体積の追加
+WW_volume = data.frame(Density = c("High", "Middle", "Low"),
+                    WW_sum = c(453.4, 238.5, 153.8), #wwg
+                    Seaweed_volume_m3 = c(630, 227, 175)/1000/1000) #ml -> m^3 海藻の体積
+
+Trident = Trident %>% full_join(WW_volume, by = c("Density")) %>% 
+  na.omit()
+
+#Densityの順位を変更
+Trident$Density = factor(Trident$Density, levels =  c("Low", "Middle", "High"))
+
+```
+  
+それぞれの条件ごとに、測定初期の乱れを除去するため`r removetime`秒を捨てる。変動速度測定に使用するのは、開始位置から`r used_time`分間とする。 TRUEが明条件、FALSEが暗条件を示す。
+```{r, echo = F, results = "hold"}
+#生データの作図
+ggplot(Trident)+
+  geom_point(aes(x = Elapsed_time, y = DO))+
+  facet_grid(Density ~ Light + Hz)
+  
+#生データの構造確認
+print(Trident, n = 10)
+```
+
+#### 生データから溶存酸素の変化速度を算出
+```{r, results = "hold", warning = F}
+#溶存酸素濃度の変化速度を算出するための関数作成
+Glmmodel = function(y, x){
+  summary(glm(y ~ x, family = Gamma(link = "log")))
+}　　　　　　　　　　　　　　　　　　　　　　　　
+
+Slope = function(x){　　　　　　　　　　　　　　　
+  coef(x)[2]
+} 
+
+Slope_error = function(x){　　　　　　　　　　　　　　　
+  coef(x)[4]
+} 
+
+#溶存酸素変化速度を算出算出
+DO_analysis = Trident %>%
+  group_by(Hz, Light, WW_sum, Seaweed_volume_m3, Density) %>%
+  nest() %>% 
+  mutate(Model = map(data, ~ glm(DO ~ Elapsed_time, data = .,
+                                 family = Gamma(link = "log")))) %>% 
+  mutate(Summary = map(Model, ~summary(.))) %>% 
+  mutate(Slope = map_dbl(Model, ~Slope(.)),
+         Stderr = map_dbl(Model, ~Slope_error(summary(.))))
+
+#湿重量あたりの溶存酸素変化速度を算出
+DO_analysis_WW = DO_analysis %>% 
+　mutate(Slope = Slope / WW_sum, Stderr = Stderr / WW_sum) 
+```
+
+\pagebreak
+
+#### 湿重量あたりの溶存酸素濃度の変化速度の確認  
+TRUEが明条件、FALSEが暗条件を示す。  
+暗条件のデータは、実質呼吸速度を示す。図を見ると、流速が増加するにしたがって呼吸速度が正になっている。測定開始時は、窒素ばっ気することで溶存酸素濃度を90%程に落している。そのため、空気中から、溶存酸素が海水に溶け込んでいることになる。流速が増加するにしたがって、呼吸速度よりも、空気中からの溶け込み速度（ガス交換速度）が高くなったことが考えられる。
+```{r, echo = F}
+#湿重量あたりの溶存酸素濃度の変化速度の確認
+ggplot(DO_analysis_WW)+
+  geom_point(aes(x = Hz, y = Slope, color = Density))+
+  geom_line(aes(x = Hz, y = Slope, color = Density))+
+  geom_hline(yintercept = 0)+
+  facet_grid(Light ~ .)
+
+#データの構造確認
+print(DO_analysis_WW, n = 10)
+```
+
+\pagebreak
+
+### 溶存酸素変化速度の補正：海水と空気中のガス交換速度にて
+　小型回流水槽で実験する際、測器の取り付けや実験の効率を考えて、観測部分水路の上部は開放した状態で実験を行った。そのため、流速が速くなるにつれて、海水-空気間の酸素ガスの交換が活発となり、溶存酸素濃度の変動に影響を与えると考えられる。そこで、海藻を入れていない状態で、窒素ばっ気により、溶存酸素濃度を低下させた海水の溶存酸素濃度の経時変化を測定し、流速条件ごとのガス交換速度を算出した。  
+　実験を行った流速条件は6, 0.5, 4, 8, 20 Hzとした。  
+  
+  補正に使用するデータの確認。
+```{r, results = "hold", warning = F}
+#大気-海水間の酸素フラックスの算出-------------------------------------------------------------
+#光合成実験3で測定したデータを使用する。回流水槽内に海藻は入っていない。
+Trident_flux = read_csv("../回流水槽光合成実験3/Modified_data/DO_air_water_Flux_data.csv") 
+print(Trident_flux, n = 10)
+ggplot(Trident_flux)+
+  geom_point(aes(x = Elapsed_time, y = DO, color = "DO"))+
+  geom_point(aes(x = Elapsed_time, y = DO_saturation, color = "DO_saturation"))+
+  facet_wrap("Hz")
+
+```
+
+　以上のデータを以下の式に当てはめる。
+　<br />
+
+　$DO_{t}\:=\:C\:*\:exp(-k\:*\:t)\:+\:DO_{sat}$  
+　$DO_{t}$:経過時間tにおける溶存酸素濃度  
+　$C$:t = 0における溶存酸素濃度と飽和溶存酸素濃度の差  
+　$k$:溶存酸素濃度のガス交換による変化速度  
+　$DO_{sat}$:経過時間tにおける飽和溶存酸素濃度  
+
+```{r, results = "hold", warning = F}
+#データを用いてKの算出（ｋが負になると酸素の放出、正は吸収）-----------------------------
+library(nlstools)
+model = function (k , C, t, DO_saturation){
+  C * exp(-k * t) + DO_saturation
+}
+
+k = Trident_flux %>%
+  filter(!ID == "ECSER09") %>% 
+  group_by(Hz) %>% 
+  nest() %>% 
+  mutate(nlsout = map(data, function(x){nls(DO~model(k0,C0,Elapsed_time, DO_saturation),
+                                            data = x, start = list(k0=0.11, C0=-4))}),
+         k = map_dbl(nlsout, function(x){coef(x)[[1]]}))
+
+#当てはまり確認
+k
+k$nlsout
+```
+
+  すべてのHzのおいてｋを算出していないため、Hzとｋは直線回帰で近似できると仮定して、ｋを補足する
+```{r, results = "hold", warning = F}
+#算出した酸素フラックス速度定数kを持ちいて、実験中の酸素フラックスを見積もる:使用するモデルはパターン2の
+#DO_saturation を変動モデル
+#現在（2018-03-21現在）ではすべてのHzのおいてｋを算出していないため、Hzとｋは直線回帰で近似できると
+#仮定して、ｋを補足する
+
+Hz = data.frame(Hz = c(0.5, 1, 2, 4, 6, 8, 10, 15, 20))
+k = k %>%
+  full_join(Hz) %>% 
+  arrange(Hz)
+
+#Hz6の推定が悪いので、NAにする
+k = k %>% mutate(k = ifelse(Hz == 6, NA, k))
+
+#一次式で近似
+k_pre = data_frame(Hz = k$Hz, k = predict(lm(k ~ Hz, k),
+                                          data = data_frame(Hz = k$Hz),
+                                          newdata=data.frame(Hz = k$Hz)))
+
+ggplot()+
+  geom_point(aes(x = Hz, y = k), data = k)+
+  geom_line(aes(x = Hz, y = k), data = k_pre)
+```
+
+　kを用いて溶存酸素濃度を補正する
+```{r, results = "hold", warning = F}
+#kを用いてDO濃度を補正
+DO_offset_Flux = Trident %>% 
+  mutate(DO_saturation = gas_O2sat(S = Sal, t = Temp),
+         DO_diff = DO_saturation - DO) %>% 
+  left_join(k_pre, by = "Hz") %>%
+  mutate(DO_Flux_min = DO_diff * k) %>% 
+  group_by(ID, Hz, Light, Density) %>% 
+  mutate(DO_Flux_min_cum = cumsum(DO_Flux_min),
+         DO_offset_Flux = DO - DO_Flux_min_cum) %>%
+  return()
+
+print(DO_offset_Flux, n = 10)
+
+ggplot()+
+  # geom_point(aes(x = Elapsed_time, y = DO_Flux_min, color = "Flux"), data = DO_offset_Flux)+
+  geom_point(aes(x = Elapsed_time, y = DO_offset_Flux, color = "補正後"), data = DO_offset_Flux)+
+  # geom_smooth(aes(x = Elapsed_time, y = DO_offset_Flux, color = "offset_line"), method = "glm",
+  # data = DO_offset_Flux)+
+  # geom_point(aes(x = Elapsed_time, y = DO_saturation, color = "Saturation"), data = DO_offset_Flux)+
+  geom_point(aes(x = Elapsed_time, y = DO, color = "補正前"), data = DO_offset_Flux)+
+  # geom_smooth(aes(x = Elapsed_time, y = DO, color = "raw_line"), method = "glm", data = DO_offset_Flux)+
+  # geom_point(aes(x = Elapsed_time, y = DO_diff, color = "diff"), data = DO_offset_Flux)+
+  # geom_point(aes(x = Elapsed_time, y = DO_Flux_min_cum, color = "cum"), data = DO_offset_Flux)+
+  # geom_line(aes(x = Elapsed_time, y = k, color = "k"), data = DO_offset_Flux)+
+  facet_grid(Density ~ Light + Hz)
+```
+
+  補正した溶存酸素濃度を用いて、変化速度を再計算
+```{r, results = "hold", warning = F}
+DO_analysis_k = DO_offset_Flux %>%
+  group_by(Hz, Light, WW_sum, Seaweed_volume_m3, Density) %>%
+  nest() %>% 
+  mutate(Model = map(data, ~ glm(DO_offset_Flux~Elapsed_time, data = ., 
+                                 family = Gamma(link = "log")))) %>% 
+  mutate(Summary = map(Model, ~summary(.))) %>% 
+  mutate(Slope = map_dbl(Model, ~Slope(.)),
+         Stderr = map_dbl(Model, ~Slope_error(summary(.))),
+         Temp_mean = map_dbl(data, function(x){
+           x %>%
+             summarise(Temp = mean(Temp)) %>% 
+             pull(Temp)}),
+         Temp_sd = map_dbl(data, function(x){
+           x %>%
+             summarise(Temp = sd(Temp)) %>% 
+             pull(Temp)}))
+
+#湿重量あたりの溶存酸素変化速度を算出
+DO_analysis_k_WW = DO_analysis_k %>% 
+　mutate(Slope = Slope / WW_sum, Stderr = Stderr / WW_sum) 
+```
+
+  補正後の溶存酸素変化量の確認。  
+  呼吸速度は、0以下の値を取るように補正された。光合成速度は山形の変動を示した。
+```{r, echo = F}
+#湿重量あたりの溶存酸素濃度の変化速度の確認
+ggplot(DO_analysis_k_WW)+
+  geom_point(aes(x = Hz, y = Slope, color = Density))+
+  geom_line(aes(x = Hz, y = Slope, color = Density))+
+  geom_hline(yintercept = 0)+
+  facet_grid(Light ~ .)
+
+#データの構造確認
+print(DO_analysis_k_WW, n = 10)
+```
+
+\pagebreak
+
+### 溶存酸素変化速度の補正：水温による補正
+本実験では、水温の制御なしで実験を行った。光条件、密度条件ごとの平均水温、及び分散は以下のようになった。
+```{r, echo=F}
+Temp_mean = Trident %>%
+  group_by(Light, Density) %>% 
+  summarise(Temp_mean = round(mean(Temp),digits = 3), Temp_sd = round(sd(Temp), digits = 3))
+
+g =  gridExtra::tableGrob(Temp_mean) 
+
+#描画
+grid.draw(g)
+```
+
+  補正は以下のアレニウスの式を用いて行う。Durocher and Allen (2012)を参照。
+    
+  $r^{'}\:=\:r\:*\:exp(-Ea\:/\:k\:(\:1/K\:-\:1/K0\:)$  
+  <br />
+
+　$r^{'}$:補正後（水温がk0のとき）の値  
+　$r$:補正前（それぞれの値の水温）の値  
+　$k$:ボルツマン定数  
+　$Ea$:活性化エネルギー（海藻の状態や実験条件によって異なると考えられる）  
+  
+  海藻の生理的な応答がアレニウスの式の関係に従うと仮定し、K0のときの水温に合わせて補正する。
+  まず、補正前のデータもちいてEaを推定する。補正する水温は20 &deg;C とした。
+
+  Eaの値が、以上に大きいため、この値で補正するには不適切であると考えられる。
+```{r, results = "hold", warning = F}
+bolzmann = 8.617e-5 #ボルツマン定数
+K0 = 20 +  273.15 #補正水温K0は全ての条件で統一する。
+
+#光条件ごとにEaを推定し、推定したEaでSlopeを補正
+DO_analysis_k_WW_Ea = DO_analysis_k_WW %>% 
+  group_by(Light) %>%
+  mutate(Slope = ifelse(Light, Slope, Slope*(-1))) %>% 
+  nest() %>%
+  mutate(data = map(data, function(x) {
+    x %>% 
+      mutate(K0 = K0,
+             K = Temp_mean + 273.15,
+             invK = (1 / (K0 * bolzmann) - 1 / (K * bolzmann)),
+             Slslope = scale(log(Slope), scale = F))
+    })) %>% 
+  mutate(Model = map(data, function(x){lm(Slslope ~ invK, data = x) %>% summary()}),
+         Ea = map_dbl(Model, function(x){coef(x)[2]}),
+         data_temp = map2(data, Ea, function(x, y){
+           x %>%
+             mutate(Slope = Slope * exp(-y * invK))}))
+
+DO_analysis_k_WW_Ea %>% 
+  select(Light, data_temp) %>% 
+  unnest() %>% 
+  ggplot()+
+  geom_point(aes(x = Hz, y = Slope, shape = "補正前", color = Temp_mean),
+             size = 3,
+             data = DO_analysis_k_WW %>% 
+               mutate(Slope = ifelse(Light == T, Slope, Slope*(-1))))+
+  geom_point(aes(x = Hz, y = Slope, shape = "補正後", color = Temp_mean),
+             size = 3)+
+  facet_grid(Light ~ Density)
+
+#Light,Density 条件ごとにEaを推定した場合。
+DO_analysis_k_WW_Ea = DO_analysis_k_WW %>% 
+  group_by(Light, Density) %>%
+  mutate(Slope = ifelse(Light, Slope, Slope*(-1))) %>% 
+  nest() %>%
+  mutate(data = map(data, function(x) {
+    x %>% 
+      mutate(K0 = K0,
+             K = Temp_mean + 273.15,
+             invK = (1 / (K0 * bolzmann) - 1 / (K * bolzmann)),
+             Slslope = scale(log(Slope), scale = F))
+    })) %>% 
+  mutate(Model = map(data, function(x){lm(Slslope ~ invK, data = x) %>% summary()}),
+         Ea = map_dbl(Model, function(x){coef(x)[2]}),
+         data_temp = map2(data, Ea, function(x, y){
+           x %>%
+             mutate(Slope = Slope * exp(-y * invK))}))
+
+DO_analysis_k_WW_Ea %>% 
+  select(Light, Density, data_temp) %>% 
+  unnest() %>% 
+  ggplot()+
+  geom_point(aes(x = Hz, y = Slope, shape = "補正前", color = Temp_mean),
+             size = 3,
+             data = DO_analysis_k_WW %>% 
+               mutate(Slope = ifelse(Light == T, Slope, Slope*(-1))))+
+  geom_point(aes(x = Hz, y = Slope, shape = "補正後", color = Temp_mean),
+             size = 3)+
+  facet_grid(Light ~ Density)
+
+```
+
+  次にEaを0.65で固定して補正する。  
+  補正前後で大きな変化はない。水温の変動から考えても妥当か。
+```{r, results = "hold", warning = F}
+#全ての条件でEaを固定する。
+FixedEa = 0.65 
+
+DO_analysis_k_WW_FixedEa = DO_analysis_k_WW %>% 
+  group_by(Light) %>%
+  mutate(Slope = ifelse(Light, Slope, Slope*(-1))) %>% 
+  nest() %>%
+  mutate(data = map(data, function(x) {
+    x %>% 
+      mutate(K0 = K0,
+             K = Temp_mean + 273.15,
+             invK = (1 / (K0 * bolzmann) - 1 / (K * bolzmann)),
+             Slslope = scale(log(Slope), scale = F))
+    })) %>% 
+  mutate(Ea = FixedEa,
+         data_temp = map2(data, Ea, function(x, y){
+           x %>%
+             mutate(Slope = Slope * exp(-y * invK))})) 
+
+DO_analysis_k_WW_FixedEa
+DO_analysis_k_WW_FixedEa %>% 
+  select(Light, data_temp) %>% 
+  unnest() %>% 
+  ggplot()+
+  geom_point(aes(x = Hz, y = Slope, shape = "補正前", color = Temp_mean),
+             size = 3,
+             data = DO_analysis_k_WW %>% 
+               mutate(Slope = ifelse(Light == T, Slope, Slope*(-1))))+
+  geom_point(aes(x = Hz, y = Slope, shape = "補正後", color = Temp_mean),
+             size = 3)+
+  facet_grid(Light ~ Density)
+
+```
+  水温補正は、実験間の水温のばらつきが最大で約1&deg;C 程であることから、それほど必要ないかもしれない。推定したEaの絶対値が大きくなったのは、Eaを算出する際に、密度条件や個体差によるSlopeの違いが、推定に反映されたからではないか。  
+    ***よって水温補正は、固定したEaを用いた補正を使用する。***
+
+\pagebreak
+
+### 総光合成速度の算出
+  総光合成速度は、純光合成速度と総光合成速度の和で算出される。
+```{r, results = "hold", warning = F}
+NP = DO_analysis_k_WW_FixedEa %>% 
+  select(Light, data_temp) %>% 
+  unnest() %>% 
+  filter(Light == TRUE) %>% 
+  mutate(type = "NP") %>% 
+  select(type, Hz, Density, WW_sum, Temp_mean, Seaweed_volume_m3, Slope)
+
+RP = DO_analysis_k_WW_FixedEa %>% 
+  select(Light, data_temp) %>% 
+  unnest() %>% 
+  filter(Light == FALSE) %>% 
+  mutate(type = "RP") %>% 
+  select(type, Hz, Density, WW_sum, Temp_mean, Seaweed_volume_m3, Slope)
+
+GP = NP %>% 
+  full_join(RP, by = c("Hz", "Density", "WW_sum", "Seaweed_volume_m3")) %>% 
+  mutate(Slope = Slope.x + Slope.y, 
+         type = "GP") %>% 
+  select(type, Hz, Density, WW_sum, Seaweed_volume_m3, Slope)
+
+#データの結合
+V = 200 #L 回流水槽の容量
+Slope_DO = bind_rows(NP, RP, GP) %>% 
+  mutate(Slope = Slope*V, #単位をmg/l/min/gww -> mg/min/gww
+         Slope = Slope*1000) #単位をmg/min/gww -> μg/min/gww
+
+head(Slope_DO)
+```
+
+\pagebreak
+
+## 流速データの補正
+  流速データのノイズを除去する。Jesson et al., 2013参照
+  
+### ノイズ除去のための関数作成
+```{r, results = "hold", warning = F, eval = Redo}
+# Read packages ----------------------
+library(lubridate)
+library(zoo)
+
+# Declare the function --------------------------
+#ｘには流速の残差が代入される。差分法による微分値を算出する。
+gradient = function(x){
+  n = length(x)
+  j = 2:(n-1)
+  c(x[2] - x[1],
+    sapply(j, function(j, z){(z[j+1] - z[j-1])*0.5}, z = x),
+    x[n] - x[n-1])
+}
+
+#advdataには、流速の生データが代入される。残りの引数はそれぞれの閾値を示す。
+#閾値は、論文より引用して決めるが、便宜上以下の値を使用。
+#返り値は、閾値から外れたデータをNAに変化したもの。
+snr_corr_filter = function(advdata, snr.threshold=2, corr.threshold=60) {  
+  # A filter for the SNR and CORR.
+  require(tidyverse)
+  snr = advdata %>% select(dplyr::starts_with("snr")) %>% mutate_all(funs(na=. < snr.threshold))
+  corr = advdata %>% select(dplyr::starts_with("corr")) %>% mutate_all(funs(na=. < corr.threshold))
+  tmp = as.matrix(advdata %>% select(dplyr::contains("vel")))
+  tmp[as.matrix(snr %>% select(dplyr::ends_with("na")))] =NA
+  tmp[as.matrix(corr %>% select(dplyr::ends_with("na")))] =NA
+  tmp
+}
+
+interpolate = function(value) {
+  # Conducts a cubic spline interpolation of removed spikes.
+  x = which(!is.na(value))
+  y = value[x]
+  xi = seq_len(length(value))
+  spline(x,y, xout=xi, method="fmm")$y
+}
+ellipse_radius=function(ab, theta, alpha=0, x0=0, y0=0) {
+  # Use the polar equation of the ellipse to determine the radius.
+  x=x0+ab[1]*cos(theta)*cos(alpha)-ab[2]*sin(theta)*sin(alpha)
+  y=y0+ab[1]*cos(theta)*sin(alpha)+ab[2]*sin(theta)*cos(alpha)
+  radius=ab[1]*ab[2]/(sqrt(ab[1]^2*sin(theta-alpha)^2+ab[2]^2*cos(theta-alpha)^2))
+  data.frame(x,y,radius)
+}
+distance_radius=function(x,y, ab, alpha=0) {
+  # Determine the distance to the point and the distance (radius)
+  # to the edge of the ellipse
+  theta = atan(y/x)
+  distance=sqrt(x^2+y^2)
+  theta[x<0]=theta[x<0]+pi
+  radius = ellipse_radius(ab, theta, alpha=alpha)
+  data.frame(theta, distance, radius=radius$radius)
+}
+
+make_ellipse = function(ab,alpha=0,x0=0,y0=0,size=500) {
+  theta=seq(0,2*pi,length=size)
+  x=x0+ab[1]*cos(theta)*cos(alpha)-ab[2]*sin(theta)*sin(alpha)
+  y=y0+ab[1]*cos(theta)*sin(alpha)+ab[2]*sin(theta)*cos(alpha)
+  data.frame(x,y)
+}
+
+#残差と残差の微分値（一階、二階）の相関図は、楕円形となる。
+#楕円作図用関数
+plotdata=function(f,ft,ftt,f_ft, ft_ftt, f_ftt,f_ft_bad, ft_ftt_bad, f_ftt_bad, theta) {
+  require(ggplot2)
+  ell_f_ft = make_ellipse(f_ft,0)
+  ell_ft_ftt = make_ellipse(ft_ftt,0)
+  ell_f_ftt = make_ellipse(f_ftt,theta)
+  plot1=ggplot(data.frame(f,ft)) +
+    geom_point(aes(f,ft, color=f_ft_bad)) +
+    geom_path(aes(x,y), data=ell_f_ft)
+  plot2=ggplot(data.frame(ft,ftt)) +
+    geom_point(aes(ft,ftt, color=ft_ftt_bad)) +
+    geom_path(aes(x,y), data=ell_ft_ftt)
+  plot3=ggplot(data.frame(f,ftt)) +
+    geom_point(aes(f,ftt, color=f_ftt_bad)) +
+    geom_path(aes(x,y), data=ell_f_ftt)
+  gridExtra::grid.arrange(plot1,plot2,plot3, ncol=2)
+}
+MAD = function(x) {
+  # See Wahl (2003) Discussion of "Despiking Acoustic Doppler Velocimeter Data"
+  # by Derek G. Goring and Vladimir I. Nikora, Journal of Hydraulic Engineering, 129(6), 484-487.
+  # and Goring and Nikora (2003) Closure to "Depiking Acoustic Doppler
+  # Velocimeter Data" by Derek G. Goring and Vladimir I. Nikora,
+  # Journal of Hydraulic Engineering, 129(6), 487-488.
+  # This function calculates the median absolute deviation. The value 1.483
+  # makes it similar to the standard deviation.
+  sigma = median(abs(x - median(x, na.rm=T)), na.rm=T)
+  k = 1.483 # for normal distribution
+  k*sigma
+}
+despike=function(f, good_data, figures=TRUE) {
+  ft = gradient(f)
+  ftt = gradient(ft)
+  theta = atan(sum(f*ftt)/sum(f^2))
+  fsigma = MAD(f)
+  ftsigma = MAD(ft)
+  fttsigma = MAD(ftt)
+  nobs = length(f)
+  lambda = sqrt(2*log(nobs)) # Universal threshold
+  # Set the minor and major axes for the ellipse
+  f_ft = c(lambda*fsigma, lambda*ftsigma)
+  f_ftt = c(lambda*fsigma, lambda*fttsigma)
+  ft_ftt = c(lambda*ftsigma, lambda*fttsigma)
+  # Determine the distance and radius of the ellipse for each point
+  f_ft_tr = distance_radius(f, ft, f_ft)
+  f_ftt_tr = distance_radius(f, ftt, f_ftt, alpha=theta)
+  ft_ftt_tr = distance_radius(ft, ftt, ft_ftt)
+  # Determine of the point is beyond the ellipse
+  f_ft_bad = apply(f_ft_tr [, c("radius","distance")], 1, diff) > 0
+  f_ftt_bad = apply(f_ftt_tr [, c("radius","distance")], 1, diff) > 0
+  ft_ftt_bad = apply(ft_ftt_tr[, c("radius","distance")], 1, diff) > 0
+  # Flag the spikes to remove
+  makeNA = unique(sort(c(which(f_ft_bad), which(f_ftt_bad), which(ft_ftt_bad))))
+  f_tmp=f
+  makeNA = makeNA[!(makeNA %in% good_data)]
+  f[(makeNA)] = NA
+  f[1] = ifelse(is.na(f[1]), 0, f[1]) #初期値がNAの場合エラーを返すのでNAの場合は便宜上0を代入
+  # f_new = interpolate(f)
+  f_new = zoo::na.locf(f,na.rm=FALSE)
+  if(is.na(f_new[1])) f_new[1] = f_new[2]
+  if(figures) {
+    plotdata(f_tmp, ft, ftt,
+             f_ft, ft_ftt, f_ftt,
+             f_ft_bad, ft_ftt_bad, f_ftt_bad, theta)
+  }
+  mat = matrix(c(f,ft,ftt), ncol=3)
+  mat2 = matrix(c(f_ft, f_ftt, ft_ftt), ncol=2, byrow=T)
+  list(f = f_new, N = length(makeNA), navalues = makeNA, mat = mat, mat2 = mat2, theta=theta)
+}
+nk_despike = function(f, just_despike=TRUE, quiet=TRUE) {
+  f_mean = mean(f, na.rm=T)
+  i=1
+  Nold=100
+  deltaN = 100
+  lambda = sqrt(2*log(length(f)))
+  C1 = 1.483
+  C2 = 1.483
+  f = f - f_mean
+  fsigma = MAD(f)
+  um = C2 * fsigma * lambda
+  good_data = which(f >= -C1*fsigma, f <= C1*fsigma)
+  remove = which(abs(f) > um)
+  f[remove] = NA
+  f[1] = ifelse(is.na(f[1]), 0, f[1]) #初期値がNAの場合エラーを返すのでNAの場合は便宜上0を代入
+  f = zoo::na.locf(f, na.rm=FALSE)
+  f = f + f_mean
+  number_of_spikes = rep(0, 10)
+  while(deltaN > 0 & i < 10) {
+    f = f - f_mean
+    out=despike(f, good_data, figure=F)
+    length(out$f)
+    dim(out$mat)
+    number_of_spikes[i] = out$N
+    Nnew = out$N
+    f=out$f + f_mean
+    # f_mean = mean(f, na.rm=T)
+    f_mean = median(f, na.rm=T)
+    deltaN = abs(Nold - Nnew)
+    Nold = Nnew
+    if(!quiet) {cat(paste0(i, ": Number of spikes detected: ", Nnew, "\n"))}
+    i = i+1
+  }
+  spikes_removed = number_of_spikes[1]-number_of_spikes[i-1]
+  if(!quiet) {
+    cat(paste0("Spikes identified: ", number_of_spikes[1],
+               "\nProportion of spikes: ", round((number_of_spikes[1] / length(f)),4)*100,
+               "% of data.\n",
+               "Spikes removed: ", spikes_removed))}
+  if(just_despike) {
+    f
+  } else {
+    list(f=f, out=out)
+  }
+}
+
+```
+
+\pagebreak
+
+### 流速データの読み込みとノイズの除去
+
+```{r, results = "hold", warning = F, eval = Redo}
+vector_names = dir("../回流水槽光合成実験5/Data/Velocity/", pattern = "dat", full = T)
+
+cnames_vectrino=c("time", "counter", "status",
+                  "xvel", "yvel", "zvel", "z2vel",
+                  "amp1", "amp2", "amp3", "amp4",
+                  "snr1", "snr2", "snr3", "snr4",
+                  "corr1", "corr2", "corr3", "corr4")
+
+vector = lapply(vector_names, read_table , col_names=cnames_vectrino)
+
+vector_test1 = vector("list", length(vector_names))
+vector_test2 = vector("list", length(vector_names))
+vector_test_result = vector("list", length(vector_names))
+
+for(i in 1:length(vector_names)){
+  # Try on a small subset of data
+  # Trial run on the first 10000 data points
+  vector_test1[[i]] = vector[[i]] %>% slice(1000:11000) #testのため一部抽出
+  
+  # Remove spikes
+  # First clean up the data based on the SNR and CORR
+  x = names(vector_test1[[i]] %>% select(dplyr::contains("vel")))
+  vector_test1[[i]][,x]=snr_corr_filter(vector_test1[[i]])
+  
+  # Next run nk_despike() to clean it all up.
+  vector_test2[[i]] = vector_test1[[i]] %>% mutate(tau = 1:length(xvel),
+                                                   u = zoo::na.locf(xvel,na.rm=F), #NAを直近のNA以外の数値に置き換える
+                                                   v = zoo::na.locf(yvel,na.rm=F),
+                                                   w = zoo::na.locf(zvel,na.rm=F))
+  
+  vector_test_result[[i]] = vector_test2[[i]] %>% mutate_at(vars(u,v,w), nk_despike)
+}
+
+names(vector_test_result) = paste("", str_extract(vector_names,
+                                                  "[0-9]{1,2}_[0-9]{1,2}_[0-9]{1,3}_[HLM]"), sep = "")
+
+vector_test_result2 = vector_test_result %>%
+  bind_rows(.id = "location") %>%
+  mutate(location2 = location) %>%
+  tidyr::separate(location2, into=c("Hz", "Depth", "Distance", "Density"), sep = '_') %>%
+  select(Hz, Depth,
+         Distance, Density,
+         time,
+         xvel, yvel, zvel, z2vel,
+         tau, u, v, w) %>%
+  mutate(Depth = as.numeric(Depth),
+         Hz = as.numeric(Hz)) %>% 
+  mutate(Distance = as.numeric(Distance)) %>% 
+  arrange(Hz, Distance, Depth, Density) %>%
+  tbl_df()
+
+vector_all = vector_test_result2 %>%
+  mutate(Hz = ifelse(Hz == 5, 0.5, Hz)) %>% 
+  mutate(Density = recode(Density, H = "High", M = "Middle", L = "Low"))
+
+#保存
+write.csv(vector_all, "../回流水槽光合成実験5/Modified_Data/vector_all.csv")
+```
+
+\pagebreak
+
+### 流動の統計量の算出
+　算出流動に関する統計量は以下とする。  
+
+* 実験条件、測定値ごとの平均値: $\bar{u}$
+* 残差: $u^{\prime}=u-\bar{u}$
+* 残差の二乗平均: $\bar{u}^{\prime}=\sum(u^{\prime})^{2}\:/\:n$
+* TKE(乱流エネルギー): $TKE=0.5*(\bar{u}^{\prime2}+\bar{v}^{\prime2}+\bar{w}^{\prime2})$
+* Reynold stress: $\bar{RS}= -\sum u^{\prime}*w^{\prime}\:/n$
+　
+```{r, results = "hold", warning = F}
+vector_all$Density = factor(vector_all$Density, levels = c("High", "Middle", "Low"))　#密度の順位変更
+
+vector_mean = vector_all %>%
+  group_by(Hz, Depth, Distance, Density) %>%
+  summarise_at(vars(xvel, yvel, zvel, u, v, w),funs(mean, sd)) 
+
+vector_zansa = vector_all %>%
+  left_join(vector_mean, by=c("Depth", "Distance", "Hz", "Density")) %>%
+  mutate(zansaX = u - u_mean, zansaY = v - v_mean, zansaZ = w - w_mean)
+
+vector_zansa_mean = vector_zansa %>%
+  group_by(Depth, Distance, Hz, Density) %>%
+  summarise(zansaX_mean = mean(zansaX^2),
+            zansaY_mean = mean(zansaY^2),
+            zansaZ_mean = mean(zansaZ^2),
+            stress = mean(zansaX * zansaZ) * (-1),
+            TKE = 0.5*(zansaX_mean + zansaY_mean + zansaZ_mean))
+
+#藻場直前の測定値の鉛直平均を上流流速とする。
+upstream_u_mean = vector_mean %>%
+  filter(Distance == 26) %>%
+  select(Hz, Depth, Density, upstream_u_mean = u_mean) %>% 
+  group_by(Hz, Density) %>% 
+  summarise(upstream_u_mean = mean(upstream_u_mean))
+
+vector_mean = vector_mean %>% left_join(upstream_u_mean, by = c("Hz", "Density"))
+vector_zansa_mean = vector_zansa_mean %>% left_join(upstream_u_mean, by = c("Hz", "Density"))
+
+#測定深度を藻場の中、藻場の境界、藻場の上にグループ分けする。
+vector_mean2 = vector_mean %>%
+  mutate(Depth2 = ifelse(Depth >= 7 & Depth <= 13, "edge", as.character(Depth)),
+         Depth2 = recode(Depth2, "16" = "above", "6" = "in")) 
+
+vector_zansa_mean2 = vector_zansa_mean %>%
+  mutate(Depth2 = ifelse(Depth >= 7 & Depth <= 13, "edge", as.character(Depth)),
+         Depth2 = recode(Depth2, "16" = "above", "6" = "in")) 
+```
+
+\pagebreak
+
+## 光データと藻場の形状変化データの読み込み及び編集
+
+### 光データの編集  
+  光（lux）は、ペンダントロガーを２つを、 leading edgeから15 cm, 45 cmの底面に設置して測定した。インターバルは１秒。
+```{r, results = "hold", warning = F}
+#データの読み込み----------------------------------------------------------------
+fnames = dir("../回流水槽光合成実験5/Data/Light/", pattern = "csv", full = T)
+listdata_light = lapply(fnames[-7], read.csv, header = T, skip = 1)
+light_ID = read.csv(fnames[7], header = T)
+names(listdata_light) = paste("", str_extract(basename(fnames[-7]), "Inoue_[a-z]{2,4}_[0-9]{1,6}_[LMH]"),
+                              sep = "")
+listdata_light = lapply(listdata_light, function(x){x %>% select(Time = 2, Light_lux = 4)})
+
+#データの編集---------------------------------------------------------------------
+light = listdata_light %>%
+  bind_rows(.id = "filename") %>% 
+  tidyr::separate(col = filename, into = c("Inoue", "Position", "a", "Density"), sep = "_") %>%
+  select(Position, Time, Light_lux, Density) %>% 
+  mutate(Time = as.POSIXct(parse_date_time(Time, orders = "%m/%d/%y %I:%M:%S %p", tz = "JST",
+                                           locale = "ja_JP.utf8")))
+
+light_ID = light_ID %>% 
+  mutate(starttime = as.POSIXct(as.character(Starttime), tz = "JST")) %>% 
+  select(-3)
+
+light$Hz = NA
+light$Density = NA
+
+removetime = 30 #s 初めの切り取り時間
+extracttime = removetime + 20 #s 使用する時間
+for (i in 1:nrow(light_ID)) {
+  
+  light[light$Time >= light_ID$starttime[i] + removetime &
+          light$Time <= light_ID$starttime[i] + extracttime, "Hz"] = light_ID$Hz[i]
+  
+  light[light$Time >= light_ID$starttime[i] + removetime &
+          light$Time <= light_ID$starttime[i] + extracttime, "Density"] = paste(light_ID$Density[i])
+}
+
+light = light %>%
+  na.omit() %>% 
+  group_by(Hz, Density, Position) %>% 
+  mutate(Elapsed_time = as.integer((Time - min(Time)))) %>% 
+  ungroup() %>% 
+  mutate(Density = recode(Density, H = "High", M = "Middle", L = "Low"))
+         
+
+#平均値、ばらつきを計算-------------------------------------------------------
+light_mean = light %>% group_by(Density, Hz) %>% 
+  summarise(Light_mean = mean(Light_lux), Light_sd = sd(Light_lux))
+```
+
+\pagebreak
+
+### 藻場の形状変化データの編集  
+
+```{r, results = "hold", warning = F}
+## 海藻の面積データ（cm^2）------------------------------------------
+fname = dir("../回流水槽光合成実験5/Data/Area/", pattern = "area_cm.csv", full = T)
+Area_cm = lapply(fname, read.csv, header = T)
+
+#データの編集
+names(Area_cm) = basename(fname)
+
+Area_cm = Area_cm %>%
+  bind_rows(.id = "filenames") %>% 
+  tidyr::separate(filenames, into = c("Density", "a", "b"), sep = "_") %>% 
+  select(Density, Area_cm = "Area") %>% 
+  mutate(Hz = rep(c(0,0.5,1,2,4,6,8,10,15), 3),
+         Density = recode(Density, H = "High", M = "Middle", L = "Low")) %>% 
+  group_by(Density) %>% 
+  mutate(Area_cm_rate = (1-(Area_cm / first(Area_cm)))*100) #藻場面積の減少率、単位は％
+
+```
+
+\pagebreak
+
+## データの統合
+
+### 光合成速度、光、藻場の形状変化、上流流速、藻場の深度グループごとの流速、藻場の高さデータの結合
+
+```{r, results = "hold", warning = F}
+#藻場（26cm, 41cm）の中（in）、上の淵(edge)、上(above)ごとの流速
+Velocity_bed = vector_mean2 %>%
+  ungroup() %>% 
+  filter(Distance %in% c(41, 71)) %>%
+  mutate(Velocity = sqrt((u_mean^2 + v_mean^2 + w_mean^2)/3)) %>%
+  group_by(Hz, Density, Depth2, upstream_u_mean) %>%
+  summarise(Velocity_bed = mean(Velocity),
+            Velocity_bed_sd = sd(Velocity)) 
+
+#藻場（26cm, 41cm）の中（in）、上の淵(edge)、上(above)ごとのTKE
+TKE_bed = vector_zansa_mean2 %>%
+  ungroup() %>% 
+  filter(Distance %in% c(41, 71)) %>%
+  group_by(Hz, Density, Depth2, upstream_u_mean) %>%
+  summarise(TKE_bed = mean(TKE),
+            TKE_bed_sd = sd(TKE)) 
+
+#藻場（26cm, 41cm）の中（in）、上の淵(edge)、上(above)ごとのstress
+stress_bed = vector_zansa_mean2 %>%
+  ungroup() %>% 
+  filter(Distance %in% c(41, 71)) %>%
+  group_by(Hz, Density, Depth2, upstream_u_mean) %>%
+  summarise(stress_bed = mean(stress),
+            stress_bed_sd = sd(stress)) 
+
+all_data = Slope_DO %>% 
+  full_join(light_mean, by = c("Hz", "Density")) %>% 
+  full_join(Area_cm, by = c("Hz", "Density")) %>% 
+  full_join(upstream_u_mean, by = c("Hz", "Density")) %>% 
+  full_join(Velocity_bed %>%
+              select(-upstream_u_mean) %>% 
+              spread(key = Depth2, value = Velocity_bed) %>% 
+              rename(Velocity_above = above, Velocity_edge = edge, Velocity_in = 'in'),
+            by = c("Hz", "Density")) %>% 
+  full_join(stress_bed %>% 
+              select(-upstream_u_mean) %>% 
+              spread(key = Depth2, value = stress_bed) %>% 
+              rename(stress_above = above, stress_edge = edge, stress_in = 'in'),
+            by = c("Hz", "Density")) %>% 
+  full_join(TKE_bed %>% 
+              select(-upstream_u_mean) %>% 
+              spread(key = Depth2, value = TKE_bed) %>% 
+              rename(TKE_above = above, TKE_edge = edge, TKE_in = 'in'),
+            by = c("Hz", "Density"))
+
+#藻場の高さcm
+bed_height = read_csv("../回流水槽光合成実験5/Data/Exp_Height_180522.csv") %>%
+  mutate(Height = Height + 1)
+
+all_data = all_data %>% 
+  full_join(bed_height, by = c("Hz", "Density")) 
+
+```
+
+\pagebreak
+
+### 滞留時間と藻場の空隙率（1-solid_volume_fractions）の算出
+
+  流速の変化により藻場が変形するため、藻場の体積は変化する。また、密度によって藻場内の海藻の体積も変化する。この2点を滞留時間の計算に用いる。
+  
+```{r, results = "hold", warning = F}
+Length = (90-26)/100 #m 藻場の長さ
+Width = 0.30 #m 藻場の幅
+
+all_data = all_data %>% 
+  mutate(Total_bed_volume = Height/100 * Length * Width,
+         Net_bed_volume = Total_bed_volume - Seaweed_volume_m3,
+         Tr_mean = Total_bed_volume / (Velocity_in * Height * Width), #滞留時間の単位はｓ
+         Solid_volume_fractions = Net_bed_volume/Total_bed_volume*100)#空隙率単位は％ 
+
+```
+
+### レイノルズ数の算出
+  レイノルズ数は、流体と物体大きさから、流れの状態を表現する値である。  
+  $Re=v*L/u$  
+  $v: Velocity$  
+  $L: 物体の長さ$  
+  $u: 動粘度係数$  
+  
+```{r, results = "hold", warning = F}
+#レイノルズ数の計算-------------------------------------
+#Re = vL/u v:velocity, L:物体の大きさ
+#計算に用いる物体のスケールLは藻場の高さ（m）, 海藻間の距離(m)とする。
+u = 0.94*10^-6 
+# m/s 海水２５度の時の動粘度係数(Bilger and Atkinson 1992,
+# Kays and Crawford 1993, Thomas and Atkinson 1997)
+
+all_data = all_data %>% 
+  mutate(Re_height = ((upstream_u_mean) * (Height))/u,
+         Distance_individuals = recode(Density, "High" = 3, "Middle" = 6, "Low" = 8),#個体間の距離cm
+         Re_distance = ((upstream_u_mean) * (Distance_individuals/100))/u,
+         Re_height_distance = (upstream_u_mean * ((Distance_individuals+Height)/100))/u) %>% 
+  return()
+
+#密度の順位変更
+all_data$Density = factor(all_data$Density, levels = c("High", "Middle", "Low"))
+```
+
+```{r, results = "hold", warning = F, include=F, eval = Redo}
+#保存
+write.csv(all_data, "../回流水槽光合成実験5/Modified_Data/all_data.csv")
+# all_data = read_csv("../回流水槽光合成実験5/Modified_Data/all_data.csv")
+```
+
+\pagebreak
+
+## 基本的な結果
+```{r, echo = F}
+#図関連の設定
+fig_size = c(120, 120) # mm x mm
+names(fig_size) = c("w", "h")
+point_size = 1
+line_size = 1
+
+theme_yukio = function(legend.position = c(1,0),
+                       legend.justification = c(1,0),
+                       Fontsize = 5){
+  theme_gray(base_size = Fontsize,
+             base_family = "cairo")+
+  theme(legend.position = legend.position,
+        legend.justification = legend.justification,
+        legend.title = element_blank(),
+        legend.background = element_blank(),
+        legend.key = element_blank(),
+        axis.line = element_line(color = "black"),
+        panel.grid.major = element_line(color = "gray60"),
+        panel.background = element_blank())
+}
+    
+theme_yukio_cor = function(Fontsize = 5){
+  theme_gray(Fontsize)+
+  theme(legend.position = "bottom",
+        legend.background = element_blank(),
+        legend.key = element_blank(),
+        axis.line = element_line(color = "black"),
+        panel.grid.major = element_line(color = "gray60"),
+        panel.background = element_blank())  
+}
+
+```
+
+### 藻場の流動環境の結果
+  藻場のleading edgeを0cmとし、藻場の終わりは、藻場密度がHigh:54cm, Middle:57cm, Low:54cmとした。
+```{r}
+#藻場の高さ（流速、密度条件によって変動する）を追加
+vector_mean2 = vector_mean2 %>% 
+  left_join(bed_height) %>% 
+  mutate(`H/h` = Depth/Height,
+         Density = factor(Density, levels = c("High", "Middle", "Low")))
+
+vector_zansa_mean2 = vector_zansa_mean2 %>% 
+  left_join(bed_height) %>% 
+  mutate(`H/h` = Depth/Height,
+         Density = factor(Density, levels = c("High", "Middle", "Low")))
+
+#藻場の縁を0cmとする
+vector_mean2 = vector_mean2 %>% 
+  mutate(Distance_leading_edge = Distance - 28) #leading_edgeは28cm 
+
+vector_zansa_mean2 = vector_zansa_mean2 %>% 
+  mutate(Distance_leading_edge = Distance - 28) #leading_edgeは28cm 
+
+#流速条件（Hz）を上流流速の平均値に置き換えた列を作成
+Vel_treatment = upstream_u_mean %>% 
+  ungroup() %>% 
+  group_by(Hz) %>% 
+  summarise(Vel_treatment = round(mean(upstream_u_mean), digits = 2))
+
+vector_mean2 = vector_mean2 %>% 
+  left_join(Vel_treatment)
+
+vector_zansa_mean2 = vector_zansa_mean2 %>% 
+  left_join(Vel_treatment)
+
+```
+
+\pagebreak
+
+#### 流速、密度条件ごとの水路方向流速の時間平均
+  図上部の数値は、藻場上流流速の平均値、図右のabove, edge, inはそれぞれのキャノピーの上部（16 cm）、縁(変動)、中(6 cm)を示している。 
+  
+* キャノピーのどの深度においても、藻場上流の流速が増加するにしたがって流速は増加した。
+* leading edgeから下流にいくにしたがって、aboveでは流速が増加し、edge, inでは流速は減少する傾向を示した（文献）。
+* aboveの上流流速0.39$m\:/\:sec$のとき、密度が高いから流速が高くなる傾向示し、下流にいくにつれ、差は大きくなった。
+* edge、inの上流流速0.1~0.39$m\:/\:sec$のとき、藻場密度が低いとき流速が高くなる傾向をを示した。
+* inではleading edgeから下流にいくにしたがって、流速が減少したが、密度が低密度で、減少の仕方が緩やかであった。
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_velocity = expression("Streamwise velocity:u"~"["~m~sec^-1~"]")
+xlabel_distance = expression("Distance of leading edge"~"["~cm~"]")
+
+fg1 = ggplot(vector_mean2)+
+  geom_point(aes(x = Distance_leading_edge, y = u_mean, color = Density))+
+  geom_line(aes(x = Distance_leading_edge, y = u_mean, color = Density))+
+  labs(x = xlabel_distance, y = ylabel_velocity)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  facet_grid(Depth2 ~ Vel_treatment)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_streamwiseVelo_Distance.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_streamwiseVelo_Distance.png")
+```
+
+\pagebreak
+
+#### 流速、密度条件ごとの鉛直方向の流速の時間平均
+
+* above、edgeでは藻場の直前（x = -2cm）からx = 13 cmで鉛直方向の流速が高くなり、下流にいくに従い、減少する傾向を示した。
+* 上記の傾向は、藻場密度が高いほうが顕著であった。
+* 藻場に海水がぶつかれば鉛直方向の流速が発生するが、aboveの低密度ではあまり顕著ではなく、inでは密度ごとに傾向は異なっていた。
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_velocity = expression("Vertical velocity:w"~"["~m~sec^-1~"]")
+xlabel_distance = expression("Distance of leading edge:x"~"["~cm~"]")
+
+fg1 = ggplot(vector_mean2)+
+  geom_hline(yintercept = 0)+
+  geom_point(aes(x = Distance, y = w_mean, color = Density))+
+  geom_line(aes(x = Distance, y = w_mean, color = Density))+
+  labs(x = xlabel_distance, y = ylabel_velocity)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  facet_grid(Depth2 ~ Vel_treatment)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_verticalVelo_Distance.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_verticalVelo_Distance.png")
+```
+
+\pagebreak
+
+#### 流速、密度条件ごとのレイノルズ応力
+
+  レイノルズ応力は、乱流を考慮した流体の運動方程式を立てたときに発生する項であり、渦によって発生する運動量を示している。
+
+* レイノルズ応力は、上流流速が増加するにしたがって、どの密度、深度条件での増加する傾向を示した。
+* aboveでは、高密度で高い値を示し、inでは低密度で高い値を示した。
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_stress = expression("Reynols stress"~"["~"*"~10^-5~m^2~sec^-2~"]")
+xlabel_distance = expression("Distance of leading edge:x"~"["~cm~"]")
+
+fg1 = ggplot(vector_zansa_mean2)+
+  geom_hline(yintercept = 0)+
+  geom_point(aes(x = Distance, y = stress*10^5, color = Density))+
+  geom_line(aes(x = Distance, y = stress*10^5, color = Density))+
+  labs(x = xlabel_distance, y = ylabel_stress)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  facet_grid(Depth2 ~ Vel_treatment)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_stress_Distance.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_stress_Distance.png")
+```
+
+\pagebreak
+
+#### 流速、密度条件ごとの乱流エネルギー（TKE）
+  TKEは、３方向の成分の残渣の二乗平均の和に0.5をかけた数値であり、乱流エネルギーを示す。
+  
+* TKEは上流流速が増加するにしたがって、すべての密度条件で増加した。
+* above, edgeでは比較的高密度で高い値を示し、inでは、低密度で高い値を示した。
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_TKE = expression("Turbulent kinetic energy"~"["~m^2~sec^-2~"]")
+xlabel_distance = expression("Distance of leading edge:x"~"["~cm~"]")
+
+fg1 = ggplot(vector_zansa_mean2)+
+  geom_hline(yintercept = 0)+
+  geom_point(aes(x = Distance, y = TKE, color = Density))+
+  geom_line(aes(x = Distance, y = TKE, color = Density))+
+  labs(x = xlabel_distance, y = ylabel_TKE)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  facet_grid(Depth2 ~ Vel_treatment)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_TKE_Distance.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_TKE_Distance.png")
+```
+
+\pagebreak
+
+#### 藻場内の平均流速
+  
+  3方向の流速の二乗平均を示している。
+  
+* 密度が高い方が、edge, inにおいて流速が遅くなる傾向がみらた。
+* 密度ごとの流速の違いは上流流速が約0.1 m / secから堅調になっていた。
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_vel_bed = expression("Averaged velocity at canopy: all direction"~"["~m~sec^-1~"]")
+xlabel_vel_upstream = expression("Upstream velocity:u"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(Velocity_bed)+#解析結果が保存されたオブジェクトを保存する
+  geom_pointrange(aes(x = upstream_u_mean,
+                      y = Velocity_bed,
+                      ymin = Velocity_bed - Velocity_bed_sd/sqrt(2),
+                      ymax = Velocity_bed + Velocity_bed_sd/sqrt(2),
+                      color = Density))+
+  geom_line(aes(x = upstream_u_mean, y = Velocity_bed, color = Density))+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  labs(x = xlabel_vel_upstream, y = ylabel_vel_bed)+
+  facet_grid(Depth2 ~ .)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_velcanopy_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_velcanopy_upstream.png")
+```
+
+\pagebreak
+
+#### 藻場内の平均TKE
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_TKE_bed = expression("Averaged turbulent kinetic energy at canopy"~"["~m^2~sec^-2~"]")
+xlabel_vel_upstream = expression("Upstream velocity:u"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(TKE_bed)+
+  geom_pointrange(aes(x = upstream_u_mean,
+                      y = TKE_bed,
+                      ymin = TKE_bed - TKE_bed_sd/sqrt(2),
+                      ymax = TKE_bed + TKE_bed_sd/sqrt(2),
+                      color = Density))+
+  geom_line(aes(x = upstream_u_mean, y = TKE_bed, color = Density))+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  labs(x = xlabel_vel_upstream, y = ylabel_TKE_bed)+
+  facet_grid(Depth2 ~ .)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_TKEcanopy_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_TKEcanopy_upstream.png")
+```
+
+\pagebreak
+
+#### 藻場内の平均レイノルズ応力 
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_stress_bed = expression("Averaged Reynols stress at canopy"~"["~"*"~10^-5~m^2~sec^-2~"]")
+xlabel_vel_upstream = expression("Upstream velocity:u"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(stress_bed)+
+  geom_pointrange(aes(x = upstream_u_mean,
+                      y = stress_bed,
+                      ymin = stress_bed - stress_bed_sd/sqrt(2),
+                      ymax = stress_bed + stress_bed_sd/sqrt(2),
+                      color = Density))+
+  geom_line(aes(x = upstream_u_mean, y = stress_bed, color = Density))+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  labs(x = xlabel_vel_upstream, y = ylabel_stress_bed)+
+  facet_grid(Depth2 ~ .)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_stresscanopy_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_stresscanopy_upstream.png")
+```
+
+\pagebreak
+
+#### レイノルズ数 
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_Reynolds = expression("Reynolds number [Height + Distance]")
+xlabel_vel_upstream = expression("Upstream velocity:u"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(all_data)+
+  geom_point(aes(x = upstream_u_mean, y = Re_height_distance, color = Density), size = 3)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  labs(x = xlabel_vel_upstream, y = ylabel_Reynolds)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_reynolsHeightDistance_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_reynolsHeightDistance_upstream.png")
+```
+
+\pagebreak
+
+#### 滞留時間 
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_Tr = expression("Residence time"~"["~sec~"]")
+xlabel_vel_upstream = expression("Upstream velocity:u"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(all_data)+
+  geom_point(aes(x = upstream_u_mean, y = Tr_mean, color = Density), size = 3)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  labs(x = xlabel_vel_upstream, y = ylabel_Tr)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_Tr_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_Tr_upstream.png")
+```
+
+\pagebreak
+
+### その他の要因
+
+#### 光
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_light = expression("Illuminance"~"["~lux~"]")
+xlabel_vel_upstream = expression("Upstream velocity:u"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(all_data)+
+  geom_pointrange(aes(x = upstream_u_mean,
+                      y = Light_mean,
+                      ymin = Light_mean - Light_sd,
+                      ymax = Light_mean + Light_sd,
+                      color = Density), size = 0.5)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  labs(x = xlabel_vel_upstream, y = ylabel_light)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_light_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_light_upstream.png")
+```
+
+\pagebreak
+
+#### 藻場の形状変化
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_area = expression("Change of rate of seaweed bed area"~"["~"%"~"]")
+xlabel_vel_upstream = expression("Upstream velocity:u"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(all_data)+
+  geom_point(aes(x = upstream_u_mean,
+                      y = Area_cm_rate, color = Density), size = 3)+
+  geom_line(aes(x = upstream_u_mean,
+                      y = Area_cm_rate, color = Density), size = 1)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  labs(x = xlabel_vel_upstream, y = ylabel_area)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_arearate_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_arearate_upstream.png")
+```
+
+\pagebreak
+
+#### 空隙率（藻場全体の体積の内、海藻以外の体積の割合）
+
+```{r, echo=F, eval = Redo_fg}
+ylabel_solid_volume_fractions = expression("Solid volume fractions"~"["~"%"~"]")
+xlabel_vel_upstream = expression("Upstream velocity:u"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(all_data)+
+  geom_point(aes(x = upstream_u_mean,
+                      y =Solid_volume_fractions, color = Density), size = 3)+
+  geom_line(aes(x = upstream_u_mean,
+                      y = Solid_volume_fractions, color = Density), size = 1)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  labs(x = xlabel_vel_upstream, y = ylabel_solid_volume_fractions)+
+  theme_yukio(legend.position = c(0,1),
+              legend.justification = c(0,1))
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_volumefraction_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_volumefraction_upstream.png")
+```
+
+\pagebreak
+
+#### 参考になる図
+
+```{r, echo = F}
+ggplot(vector_mean2)+
+  geom_point(aes(x = `H/h`, y = u_mean, color = as.factor(Hz)))+
+  geom_vline(xintercept = 1)+
+  geom_line(aes(x = `H/h`, y = u_mean, color = as.factor(Hz)))+
+  coord_flip()+
+  facet_grid(Density ~ Distance_leading_edge)
+
+ggplot(vector_mean2)+
+  geom_point(aes(x = `H/h`, y = w_mean, color = as.factor(Hz)))+
+  geom_vline(xintercept = 1)+
+  geom_hline(yintercept = 0)+
+  geom_line(aes(x = `H/h`, y = w_mean, color = as.factor(Hz)))+
+  coord_flip()+
+  facet_grid(Density ~ Distance_leading_edge)
+
+ggplot(vector_zansa_mean2)+
+  geom_point(aes(x = `H/h`, y = TKE, color = as.factor(Hz)))+
+  geom_vline(xintercept = 1)+
+  geom_hline(yintercept = 0)+
+  geom_line(aes(x = `H/h`, y = TKE, color = as.factor(Hz)))+
+  coord_flip()+
+  facet_grid(Density ~ Distance_leading_edge)
+
+ggplot(vector_zansa_mean2)+
+  geom_point(aes(x = `H/h`, y = stress*10^5, color = as.factor(Hz)))+
+  geom_vline(xintercept = 1)+
+  geom_hline(yintercept = 0)+
+  geom_line(aes(x = `H/h`, y = stress*10^5, color = as.factor(Hz)))+
+  coord_flip()+
+  facet_grid(Density ~ Distance_leading_edge)
+```
+
+\pagebreak
+
+### 光合成速度、呼吸速度の結果
+
+#### 呼吸速度と上流流速
+
+　暗条件下における酸素濃度の変動速度から算出した。
+```{r, echo = F, eval = Redo_fg}
+ylabel_Resp = expression("Respiration rate"~"["~mu*g~O[2]~gww^-1~min^-1~"]")
+xlabel = expression("Upstream water velocity"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(all_data %>% filter(type == "RP"))+
+  geom_point(aes(x = upstream_u_mean, y = Slope, color = Density), size = 2)+
+  geom_smooth(aes(x = upstream_u_mean, y = Slope), method = "gam", formula = y~s(x))+
+  labs(x = xlabel, y = ylabel_Resp)+
+  ylim(0, NA)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  theme_yukio()
+ 
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_resp_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+ 呼吸速度は、藻場密度が低いほど大きく、約10 cm/sをピークに低くなる傾向を示した。
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_resp_upstream.png")
+```
+
+\pagebreak
+
+#### 純光合成速度と上流流速
+
+　明条件下における酸素濃度の変動速度から算出した。
+```{r, echo = F, eval = Redo_fg}
+ylabel_net = expression("Net photosynthesis rate"~"["~mu*g~O[2]~gww^-1~min^-1~"]")
+xlabel = expression("Upstream water velocity"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(all_data %>% filter(type == "NP"))+
+  geom_point(aes(x = upstream_u_mean, y = Slope, color = Density), size = 2)+
+  geom_smooth(aes(x = upstream_u_mean, y = Slope), method = "gam", formula = y~s(x))+
+  labs(x = xlabel, y = ylabel_net)+
+  ylim(0, NA)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  theme_yukio()
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_net_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+　純光合成速度は、呼吸速度と同様に約10 cm/sでピークをとり、その後減少した。
+しかし、流速が約26 cm/sで全ての密度条件で増加した。純光合成速度は、呼吸速度とは異なり、密度が高い方が、大きい値を示した。
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_net_upstream.png")
+```
+
+\pagebreak
+
+#### 総光合成速度と上流流速
+
+　純光合成速度と呼吸速度の合計値。
+```{r, echo = F, eval = Redo_fg}
+ylabel_gross = expression("Gross photosynthesis rate"~"["~mu*g~O[2]~gww^-1~min^-1~"]")
+xlabel = expression("Upstream water velocity"~"["~m~sec^-1~"]")
+
+fg1 = ggplot(all_data %>% filter(type == "GP"))+
+  geom_point(aes(x = upstream_u_mean, y = Slope, color = Density), size = 2)+
+  # geom_line(aes(x = upstream_u_mean, y = Slope, color = Density), size = 2)+
+  geom_smooth(aes(x = upstream_u_mean, y = Slope), method = "gam", formula = y~s(x))+
+  # geom_smooth(aes(x = upstream_u_mean, y = Slope, color = Density), method = "loess", span = 1)+
+  labs(x = xlabel, y = ylabel_gross)+
+  ylim(0, NA)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  theme_yukio()
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_gross_upstream.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+GAMによるあてはめ。上流流速と共に総光合成速度が山型に変動している。
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_gross_upstream.png")
+```
+
+\pagebreak
+
+## 各パラメータの相互関係
+
+### 総光合成速度と他の要因
+
+#### 総光合成速度と滞留時間
+
+  藻場内の海水の滞留時間は、藻場全体への向き炭素供給量と負の関係があると考えられ、滞留時間が短くなるほど、光合成速度は増加するはずである。
+　
+```{r, echo = F, eval = Redo_fg}
+ylabel_gross = expression("Gross photosynthesis rate"~"["~mu*g~O[2]~gww^-1~min^-1~"]")
+xlabel_Tr = expression("Residence time"~"["~sec~"]")
+
+fg1 = ggplot(all_data %>% filter(type == "GP"))+
+  geom_point(aes(x = Tr_mean, y = Slope, color = upstream_u_mean, shape = Density), size = 2)+
+  # geom_smooth(aes(x = Tr_mean, y = Slope), method = "gam", formula = y~s(x))+
+  scale_x_log10()+
+  scale_color_gradient2(name = expression("Upstream water velocity"~"["~m~sec^-1~"]  "),
+                        high = "red", mid = "gray50",
+                        low = "green" , midpoint = mean(all_data$upstream_u_mean, na.rm = T))+
+  labs(x = xlabel_Tr, y = ylabel_gross)+
+  ylim(0, NA)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  theme_yukio_cor()
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_gross_tr.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+GAMによるあてはめ。上流流速と共に総光合成速度が山型に変動している。
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_gross_tr.png")
+```
+
+\pagebreak
+
+#### 総光合成速度と藻場の形状変化
+
+  藻場の形状変化は、流速が高くなるにつれて、大きくなった。藻場が折りたたまれることで、光合成速度へどのような影響があるのか？
+　
+```{r, echo = F, eval = Redo_fg}
+ylabel_gross = expression("Gross photosynthesis rate"~"["~mu*g~O[2]~gww^-1~min^-1~"]")
+xlabel_area = expression("Change of rate of seaweed bed area"~"["~"%"~"]")
+
+fg1 = ggplot(all_data %>% filter(type == "GP"))+
+  geom_point(aes(x = Area_cm_rate, y = Slope, color = upstream_u_mean, shape = Density), size = 2)+
+  # geom_smooth(aes(x = Area_cm_rate, y = Slope), method = "gam", formula = y~s(x))+
+  scale_color_gradient2(name = expression("Upstream water velocity"~"["~m~sec^-1~"]  "),
+                        high = "red", mid = "gray50",
+                        low = "green" , midpoint = mean(all_data$upstream_u_mean, na.rm = T))+
+  labs(x = xlabel_area, y = ylabel_gross)+
+  ylim(0, NA)+
+  # scale_color_discrete(labels = c("3 cm", "6 cm", "8 cm"))+
+  theme_yukio_cor()
+
+width = fig_size[1]
+height = fig_size[2]
+ggsave(filename = "../回流水槽光合成実験5/fg/fg_gross_arearate.png",
+       plot = fg1,
+       device = "png",
+       width = width,
+       height = height,
+       units = "mm",
+       dpi = 600)
+```
+
+GAMによるあてはめ。上流流速と共に総光合成速度が山型に変動している。
+```{r, echo = F}
+knitr::include_graphics("../回流水槽光合成実験5/fg/fg_gross_arearate.png")
+```
+
+\pagebreak
+
+## Stanによる総光合成速度のあてはめ
+
+  本実験では、藻場上流の流速が藻場全体の総光合成速度にどのように影響を与えているかを明らかにするため、応答変数を総光合成速度、説明変数を上流流速として、モデル式へのあてはめを行った。  
+  以下のモデル式を用いた。  
+
+　$Gross\:rate\:=\:b_{0}\:+\:b_{1}*(1-exp(-b_{2}\:/b_{1}\:*\:Speed))\:*\:exp(-b_{3}\:/b_{1}\:*\:Speed)$  
+
+### Stanのコード
+
+```{stan, output.var="nonlinearmodel_gross"}
+
+functions{
+  vector modelcurve(real b0, real b1, real b2, real b3, vector speed) {
+    return (b0 + b1 * (1-exp(-b2 / b1 * speed)) .* exp(-b3 / b1 * speed));
+  }
+}
+data {
+  int<lower=0> N;                 // データの数
+  int<lower=0> M;                 // 期待値に使う結果の数
+  vector[N] speed;                // 観測した速度
+  vector[N] gross;                  // 観測した総一次生産量
+  vector[4] prior_log_sigma;      // 各パラメータの事前分散
+  vector[4] prior_log_mu;         // 各パラメータの事前期待値
+}
+transformed data {
+  vector[N] gross10;
+  vector[M] speed_predict;
+  real speed_increment;
+  gross10 = gross*10;
+  speed_increment = max(speed) / M;
+  speed_predict[1] = 0;
+  
+  for(m in 2:M) {
+    speed_predict[m] = speed_predict[m-1] + speed_increment;
+  }
+}
+parameters {
+  real<lower=0> offset;
+  real<lower=0> pmax;
+  real<lower=0> alpha;
+  real<lower=0> beta;
+  
+  real<lower=0> sigma;
+}
+transformed parameters {
+  vector[N] fitted;
+  fitted = modelcurve(offset, pmax, alpha, beta, speed);
+}
+model {
+  offset ~ lognormal(prior_log_mu[1], prior_log_sigma[1]);
+  pmax   ~ lognormal(prior_log_mu[2], prior_log_sigma[2]);
+  alpha  ~ lognormal(prior_log_mu[3], prior_log_sigma[3]);
+  beta   ~ lognormal(prior_log_mu[4], prior_log_sigma[4]);
+  sigma ~ cauchy(0, 2.5);
+  gross10 ~ lognormal(log(fitted), sigma);
+}
+generated quantities {
+  vector[M] expected10;
+  vector[M] expected;
+  vector[N] log_lik;
+  expected10 = modelcurve(offset, pmax, alpha, beta, speed_predict);
+  expected = expected10/10;
+  for(n in 1:N) {
+    log_lik[n] = lognormal_lpdf(log(gross10[n]) | log(fitted[n]), sigma);
+  }
+}
+
+
+```
+
+\pagebreak
+
+### モデル式へのあてはめ
+
+```{r, eval = Redo_stan, warning = F, results="hide"}
+#パッケージの読み込み
+library(rstan)
+
+#Stanに渡すデータを準備(Stan側と同じオブジェクト名にする)
+Gross_data = all_data %>%
+  filter(Hz != 0, type == "GP")
+
+N = nrow(Gross_data)                                      #データの数
+speed = Gross_data$upstream_u_mean*100                        #観測した速度
+gross = Gross_data$Slope*10                                  #観測した総一次生産量 
+
+#密度条件ごとに変化しないパラメーター
+M = 50                                                  #期待値に使う結果の数
+prior_log_sigma = as.vector(c(1,1,1,1))               #各パラメータの事前分散
+prior_log_mu = as.vector(c(1,1,1,1))
+
+#Stanの実行
+rng_seed　= 1111
+nchains = 4
+iter = 2000
+ncores = 4 
+
+stanout = sampling(nonlinearmodel_gross, 
+                   chains = nchains, 
+                   iter = iter, 
+                   cores = ncores,
+                   seed = rng_seed,
+                   control = list(adapt_delta = 1))
+
+#解析結果が保存されたオブジェクトを保存する
+saveRDS(stanout, file ="../回流水槽光合成実験5/Modified_Data/stanout.obj")　
+```
+
+```{r, echo = F, eval = Read_stan}
+stanout = readRDS("../回流水槽光合成実験5/Modified_Data/stanout.obj")
+```
+
+\pagebreak
+
+### Stanの結果
+
+```{r, eval = Redo_stan_fg}
+pars =  c( "offset", "pmax", "alpha", "beta", "sigma")
+pars_fitted =  c( "fitted")
+pars_expected =  c( "expected")
+# traceplot(stanout, pars = c(pars))
+# traceplot(stanout, pars = c(pars_fitted))
+# traceplot(stanout, pars = c(pars_expected))
+print(stanout, prob=c(0.025, 0.5, 0.975), par = pars)
+
+```
+
+\pagebreak
+
+## データの確認
+
+```{r, echo = F, eval = F}
+DT::datatable(all_data,  #第一引数にデータフレームを指定
+              rownames = FALSE,　#
+              caption = "all_data",
+              extensions = 'Scroller', options = list(
+  deferRender = TRUE,
+  dom = "frtiS",
+  scrollY = 200,
+  scrollX = 200,
+  scrollCollapse = TRUE
+))
+
+DT::datatable(vector_mean2,  #第一引数にデータフレームを指定
+              rownames = FALSE,　#
+              caption = "vector_mean2",
+              extensions = 'Scroller', options = list(
+  deferRender = TRUE,
+  dom = "frtiS",
+  scrollY = 200,
+  scrollX = 200,
+  scrollCollapse = TRUE
+))
+
+DT::datatable(vector_zansa_mean2,  #第一引数にデータフレームを指定
+              rownames = T,　#
+              caption = "vector_zansa_mean2",
+              extensions = 'Scroller', options = list(
+  deferRender = TRUE,
+  dom = "frtiS",
+  scrollY = 200,
+  scrollX = 200,
+  scrollCollapse = TRUE
+))
+```
+
+
+
+
+
+
+
+

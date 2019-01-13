@@ -1,0 +1,76 @@
+---
+title: "Ejection and Sweep Analysis (GLM Version) All Data"
+subtitle: "Experiments in canopy flux (Yukio Inoue)"
+author: "Greg Nishihara"
+institute: "Organization for Marine Science and Technology"
+date: "2019 January 03"
+output: 
+  bookdown::pdf_document2:
+    keep_tex: yes
+    fig_caption: yes
+    highlight: tango
+    includes:
+      in_header : ~/.latex_preambles/preamble.tex
+    latex_engine: xelatex
+    extra_dependencies: subfig
+fontsize: 10pt
+geometry: a4paper
+link-citations: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+# knitr::opts_knit$set(eval.after = 'fig.cap')
+knitr::opts_chunk$set(cache = TRUE,
+                      echo = FALSE,
+                      out.width = "95%", 
+                      fig.align = "center", 
+                      fig.height = 6, 
+                      fig.width  = 6,
+                      warning = FALSE, error = FALSE, autodep = TRUE,
+                      dev = 'CairoPDF')
+options(texi2dvi = "xetex")
+options(kableExtra.latex.load_packages = FALSE, tidyverse.quiet = TRUE)
+set.seed(2019)
+# source("r-setup.R")
+```
+
+Read some packages and the despiked data set.
+```{r library, message = FALSE, warning = FALSE, cache = FALSE}
+library(tidyverse, quietly = TRUE)
+library(broom, quietly = TRUE)
+library(modelr, quietly = TRUE)
+library(glue, quietly = TRUE)
+library(lemon, quietly = TRUE)
+library(knitr, quietly = TRUE)
+library(kableExtra, quietly = TRUE)
+library(gridExtra, quietly = TRUE)
+library(grid, quietly = TRUE)
+library(gtable, quietly = TRUE)
+library(stringr, quietly = TRUE)
+library(Cairo, quietly = TRUE)
+set.seed(2019)
+options(mc.cores = 4)
+```
+
+
+```{r, results='asis'}
+  tmp = 
+  iris %>% 
+  as_tibble() %>% 
+  group_by(Species) %>% 
+  nest() %>% 
+  mutate(out = map2(data,Species, function(data, Species) {
+    data %>% 
+      slice(1:8) %>% 
+      kable(format = "latex", booktabs = TRUE,
+                   caption = glue("{Species} test"))
+  })) %>% pull(out)
+
+for(i in 1:length(tmp)) {
+  cat("\n\\clearpage\n")
+  tmp[[i]] %>% print()
+}
+```
+

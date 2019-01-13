@@ -1,0 +1,2029 @@
+---
+title: "Ejection and Sweep Analysis (GLM Version) All Data"
+subtitle: "Experiments in canopy flux (Yukio Inoue)"
+author: "Greg Nishihara"
+institute: "Organization for Marine Science and Technology"
+date: "2019 January 05"
+output: 
+  bookdown::pdf_document2:
+    keep_tex: yes
+    fig_caption: yes
+    highlight: tango
+    includes:
+      in_header : ~/.latex_preambles/preamble.tex
+    latex_engine: xelatex
+    extra_dependencies: subfig
+fontsize: 10pt
+geometry: a4paper
+lot: yes
+lof: yes
+link-citations: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+# knitr::opts_knit$set(eval.after = 'fig.cap')
+knitr::opts_chunk$set(cache = TRUE,
+                      echo = FALSE,
+                      out.width = "95%", 
+                      fig.align = "center", 
+                      fig.height = 6, 
+                      fig.width  = 6,
+                      warning = FALSE, error = FALSE, autodep = TRUE,
+                      dev = 'CairoPDF')
+options(texi2dvi = "xetex")
+options(kableExtra.latex.load_packages = FALSE, tidyverse.quiet = TRUE)
+set.seed(2019)
+# source("r-setup.R")
+```
+
+\pagebreak
+
+# Introduction
+
+Quadrant analysis can be used to characterize flow. 
+It detects and sorts turbulent events associated with
+outward interactions (quadrant I), ejections (quadrant II), 
+inward interactions (quadrant III), and sweeps (quadrant IV).
+
+An ejection is characterized by the upward movement 
+of slow fluid $(u' < 0,\;w' > 0)$. A sweep is the downward movement of
+fast fluid $(u' > 0,\;w' < 0)$.
+
+**Definition of events**
+
+* Outward interaction (quadrant I):  $(u' > 0,\;w' > 0)$
+* Ejection (quadrant II):            $(u' < 0,\;w' > 0)$
+* Inward interaction (quadrant III): $(u' < 0,\;w' < 0)$
+* Sweep (quadrant IV):               $(u' > 0,\;w' < 0)$
+
+A hole size parameter can be defined to extract extreme events.
+This threshold is defined by:
+
+$$
+|u' w'| = H|\overline{u'w'}|
+$$
+Where $u'$ and $w'$ are the fluctuations in the
+instantaneous velocities of $u$ (longitudinal 
+direction) and $w$ (vertical direction).
+
+```{r example, echo = FALSE, fig.cap = "Bursting events and their associated quadrants. The thick line is the hole, where $|u'w'| = \\text{constant}$.", out.width="70%", out.height="70%"}
+library(tidyverse)
+SIGMA = matrix(c(2,-1,
+                 -1,2),2,2)
+x = MASS::mvrnorm(1000, c(0,0), SIGMA)
+x =  as_tibble(x) %>% rename(u = V1, w = V2)
+x = x %>% mutate(out = ifelse(abs(u*w)/(abs(mean(u*w)))> 2, "> H", "< H"))
+
+ggplot(x) +
+  geom_segment(x = -5.2, xend = 5.2, 
+               y = 0, yend = 0, 
+               arrow = arrow(angle = 15, 
+                             type = "closed"),
+               arrow.fill="black") +
+  geom_segment(x = 0, xend = 0, 
+               y = -5.2, yend = 5.2,
+               arrow = arrow(angle =15,
+                             type = "closed")) +
+  geom_point(aes(x = u, y = w, color = out), 
+             alpha = 0.5) +
+  scale_x_continuous(limit = c(-5.0, 5.0)) +
+  scale_y_continuous(limit = c(-5.0, 5.0)) +
+  stat_function(fun = function(x) {abs(2/x)},
+                n = 10001, size = 1, 
+                xlim = c(-4.5, -0.5)) +
+  stat_function(fun = function(x) {-abs(2/x)}, 
+                n = 10001, size = 1,
+                xlim = c(-4.5, -0.5)) +
+  stat_function(fun = function(x) {abs(2/x)},
+                n = 10001, size = 1, 
+                xlim = c(0.5, 4.5)) +
+  stat_function(fun = function(x) {-abs(2/x)}, 
+                n = 10001, size = 1,
+                xlim = c(0.5, 4.5)) +
+  scale_color_brewer(palette = "Dark2") +
+  guides(color = guide_legend("")) +
+  annotate("text", x = 0.1, y = 5.0, 
+           label = "w'", hjust = 0, size = 10) +
+  annotate("text", x = 5.0, y = 0.2, 
+           label = "u'", 
+           vjust = 0, 
+           hjust = 0,
+           size = 10) + 
+  annotate("text", x = 3, y = 4,
+           label = "Quadrant I\n(Outward interactions)") +
+  annotate("text", x = -3, y = 4,
+           label = "Quadrant II\n(Ejections)") +
+  annotate("text", x = -3, y = -4,
+           label = "Quadrant III\n(Inward interactions") +
+  annotate("text", x = 3, y = -4,
+           label = "Quadrant IV\n(Sweeps)") +
+  theme(axis.title = element_blank(),
+        axis.line = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        legend.title = element_blank(),
+        legend.position = c(0,0),
+        legend.justification = c(0,0))
+```
+
+## Definitions of quadrant--hole analysis
+
+**Negative momentum flux** (i.e., Reynolds shear stress; $S_{i,H}$)
+
+$$
+S_{i,H} = \frac{1}{T} \int_0^T {u'(t)\cdot w'(t)}I_{i, H, t}(u',w')\cdot dt
+$$
+
+where $i$ is the quadrat $(i = \{1,2,3,4\})$, $t$ is the time, and $T$ is the total duration. $I_{i, H, t}$ is called the conditional sampling function.
+
+$$
+I_{i,H,t}(u',w') = \left \{\begin{array}{ll}
+1, & \text{if } (u',w')\text{ is in quadrant }i\text{ and }|u'w'|  \ge H |\overline{u'w'}| \\
+0, & \text{otherwise}
+\end{array}\right .
+$$
+The quadrant fraction of the stress $(S_{i,H}^f)$ is
+
+$$
+S_{i,H}^f = S_{i,H} / S
+$$
+
+where $S$ is the mean stress,
+
+$$
+S = \frac{1}{T} \int_0^T {u'(t)\cdot w'(t)}\cdot dt
+$$
+
+Note that when $H = 0$ (no hole region), 
+
+$$
+\sum_{i=1}^4 S_{i,H=0}^4 = 1
+$$
+
+The **total kinetic energy** can also be calculated similarly.
+
+$$
+\text{TKE}_{i,H} = \frac{1}{T} \int_0^T {\frac{1}{2}\left(u'(t)^2+v'(t)^2+ w'(t)^2\right)\cdot I_{i, H, t}(u',w')\cdot dt}
+$$
+
+The quadrant fraction of the TKE $(\text{TKE}_{i,H}^f)$ is
+
+$$
+\text{TKE}_{i,H}^f = TKE_{i,H} / \text{TKE}
+$$
+
+where $\text{TKE}$ is the mean TKE,
+
+$$
+\text{TKE} = \frac{1}{T} \int_0^T {\frac{1}{2}\left(u'(t)^2+v'(t)^2+ w'(t)^2\right)\cdot dt}
+$$
+
+Note that when $H = 0$ (no hole region), 
+
+$$
+\sum_{i=1}^4 \text{TKE}_{i,H=0}^4 = 1
+$$
+
+therefore, if the sum does not equal one for a hole size of 0,
+then there is something wrong with the calculation!
+
+The duration ($D$) of events is simply,
+
+$$
+D_{i,H} = \frac{1}{T}\int_{0}^T{I_{i,H,t}\cdot dt}
+$$
+
+## Good References
+
+* Wallace JM. 2016. Quadrant Analysis in Turbluence Research: History and Evolution. Annual Review of Fluid Mechanics 45(1): 131-158.
+
+* Majoribanks TI, Hardy RJ, Lane SN, Parsons DR. 2017. Does the canopy mixing layer model apply to highly flexible aquatic vegetation? Insights from numerical modelling. Environmental Fluid Mechanics 17(2): 277-301.
+
+* Yue W, Meneveau C, Parlange MB, Zhu W, Van Hout R, Katz J. 2007. A comparative quadrant analysis of turbulence in a plant canopy. Water Resources Research 43(5): W05422.
+
+* Lelouvetel J, Bigillon F, Doppler D, Vinkovic I, Champagne JY. 2009. Experimental investigation of ejections and sweeps involved in particle suspension. Water Resources Research 45(2): W02416.
+
+# Read data and packages
+
+**The code is not printed, because it this PDF is already very long.**
+
+Read some packages and the despiked data set. 
+
+```{r library, message = FALSE, warning = FALSE, cache = FALSE}
+library(tidyverse, quietly = TRUE)
+library(broom, quietly = TRUE)
+library(modelr, quietly = TRUE)
+library(glue, quietly = TRUE)
+library(lemon, quietly = TRUE)
+library(knitr, quietly = TRUE)
+library(kableExtra, quietly = TRUE)
+library(gridExtra, quietly = TRUE)
+library(grid, quietly = TRUE)
+library(gtable, quietly = TRUE)
+library(stringr, quietly = TRUE)
+library(Cairo, quietly = TRUE)
+set.seed(2019)
+options(mc.cores = 4)
+```
+
+```{r read_data, cache = TRUE}
+# Don't read all of the data!
+col_types = "nnnc_nnnnn____nnnn"
+col_names = c("Hz", "Depth", "Distance", "Density",
+              "tau","x", "y", "z","z2", 
+              "u", "v", "w", "w2")
+out = read_csv("Modified_Data/vector_all.csv", 
+               col_types = col_types,
+               col_names = col_names, skip = 1)
+
+# out = 
+#   out %>% 
+#   group_by(Hz, Depth, Distance, Density) %>% 
+#   slice(1:2000)
+```
+
+# Declare some functions
+
+Functions for data processing. 
+
+```{r functions}
+# A function that makes functions is called a
+# function factory.
+
+calculate_TKE = function(up, vp, wp) {
+  0.5*(up*up + vp*vp + wp*wp)
+}
+calculate_stress = function(up, wp) {
+  abs(up * wp)
+}
+calculate_mean_stress = function(X) {
+  X %>% 
+    summarise(mean_stress = mean(calculate_stress(up, wp))) %>% 
+    pull(mean_stress)
+}
+calculate_mean_tke = function(X) {
+  X %>% 
+    mutate(out = calculate_TKE(up, vp, wp)) %>% 
+    summarise(mean_tke = mean(out)) %>% 
+    pull(mean_tke)
+}
+
+calculate_mean_velocity = function(X) {
+  # using rowSums is faster than using
+  # rowwise() %> %mutate(a  = sum(w, w2, na.rm=TRUE)) 
+  X %>% 
+    mutate(a  = rowSums(cbind(w, w2), na.rm=TRUE)) %>% 
+    select(u, v, w=a) %>% 
+    summarise_all(funs(mean = mean, sd = sd))
+}
+
+calculate_total_time = function(X) {
+  # In seconds
+  X %>% 
+    summarise(total_time = length(up) * 0.005) %>% 
+    pull(total_time)
+}
+
+identify_quadrant = function(up, wp) {
+  case_when(
+    (wp > 0 & up > 0) ~ 1,
+    (wp > 0 & up < 0) ~ 2,
+    (wp < 0 & up < 0) ~ 3,
+    (wp < 0 & up > 0) ~ 4
+  )
+}
+
+quadrant_analysis_function = function(H) {
+  function(X) {
+    N = nrow(X)
+    mean_stress = 
+      X %>% mutate(stress = calculate_stress(up,wp)) %>% 
+      summarise(mean_stress = mean(stress)) %>% 
+      pull(mean_stress)
+    X %>% 
+      mutate(hole_size = rep(H, N)) %>% 
+      mutate(Stress = calculate_stress(up, wp)) %>% 
+      mutate(in_hole = abs(Stress) /
+               abs(mean_stress) <= H) %>% 
+      mutate(Quadrant = 
+               identify_quadrant(up, wp))
+  }
+}
+
+calculate_residuals = function(X) {
+  X %>% 
+    mutate(a  = rowSums(cbind(w, w2), na.rm=TRUE)) %>% 
+    mutate_at(vars(u, v, a), function(x) {
+      z = mean(x, na.rm=T)
+      x - z
+    }) %>%
+    rename(up = u, vp = v, wp = a) %>% 
+    ungroup()
+}
+
+run_analysis = function(HSIZE, out, testrun = TRUE) {
+  quadrant_analysis = 
+    quadrant_analysis_function(H = HSIZE)
+  if(testrun) {
+    out = out %>% slice(1:6)
+  }
+  dset =
+    out %>% ungroup() %>% 
+    mutate(Position = 
+             case_when((Depth > 13) ~ 1,
+                       (Depth >= 7 & 
+                          Depth <= 13) ~ 2,
+                       (Depth < 7) ~ 3)) %>%
+    mutate(Position = 
+             factor(Position,
+                    labels = c("Above canopy",
+                               "Canopy edge",
+                               "Within canopy"),
+                    order = TRUE)) %>%
+    mutate(Density = 
+             factor(Density,
+                    levels = c("H", "M", "L"),
+                    labels = c("High",
+                               "Medium",
+                               "Low"),
+                    order = TRUE)) %>%
+    mutate(Hz = ifelse(Hz == 5, 0.5, Hz)) %>%
+    mutate(Distance = Distance - 28) %>%
+    select(-Depth) %>% 
+    mutate(sum = 
+             map(data,
+                 calculate_mean_velocity)) %>%
+    unnest(sum) %>%
+    mutate(data = 
+             map(data,
+                 calculate_residuals)) %>%
+    mutate(mean_stress = 
+             map_dbl(data, 
+                     calculate_mean_stress)) %>%
+    mutate(mean_tke = 
+             map_dbl(data, 
+                     calculate_mean_tke)) %>%
+    mutate(total_time = 
+             map_dbl(data,
+                     calculate_total_time)) %>%
+    mutate(data = 
+             map(data,
+                 quadrant_analysis)) %>%
+    mutate(data = 
+             map(data, function(X) {
+               X %>%
+                 mutate(Event = 
+                          factor(Quadrant,
+                                 labels = c("Outward interaction",
+                                            "Ejection",
+                                            "Inward interaction",
+                                            "Sweep"),
+                                 order = TRUE)) %>%
+                 mutate(Quadrant = 
+                          factor(Quadrant,
+                                 labels = c("I", "II", "III", "IV"),
+                                 order = TRUE))
+             })) %>%
+    mutate(data = map(data, function(X) {
+      X %>%
+        select(-(x:z2), -w2, -w)
+    })) 
+  
+  dset %>%
+    mutate(summarised_data = 
+             pmap(list(data, total_time,  mean_stress, mean_tke),
+                  function(X, total_time, mean_stress, mean_tke) {
+                    sampling_frequency = 0.005
+                    N = X %>% 
+                      summarise(tmp = length(Stress)) %>% pull(tmp)
+                    X %>%
+                      group_by(Quadrant, Event) %>%
+                      summarise(Stress = mean(Stress*as.numeric(!in_hole)),
+                                TKE = mean(calculate_TKE(up,vp,wp) * as.numeric(!in_hole)),
+                                Events = sum(as.numeric(!in_hole)),
+                                Proportion = Events / N) %>% 
+                      ungroup() %>% 
+                      mutate(Duration = Events * sampling_frequency) %>% 
+                      mutate(Stress_fraction = Stress / mean_stress * Proportion,
+                             TKE_fraction = TKE / mean_tke * Proportion)
+                  }))
+}
+
+get_slope_cf = function(X) {
+  coef(summary(X)) %>% 
+    as_tibble(rownames = "Distance") %>% 
+    filter(str_detect(Distance, "Hz")) %>% 
+    mutate(Distance=str_extract(Distance, "[0-9]+")) %>% 
+    mutate(Distance = ifelse(is.na(Distance), 26, Distance),
+           Distance = as.numeric(Distance)) %>% 
+    select(Distance, 
+           estimate = Estimate,
+           std.error = `Std. Error`) %>% 
+    mutate(l95 = estimate - 1.96*std.error,
+           u95 = estimate + 1.96*std.error)
+}
+```
+
+Functions for making tables.
+
+```{r print_functions, cache = F}
+# data_0 %>% 
+#   select(-data, -mean_stress, -summarised_data) %>% 
+#   select(u_mean:total_time)
+
+print_data_summary = function(HSIZE = 0) {
+  # Hole size does not matter here.
+  DATA = get(glue("data_{HSIZE}"))
+  CNAMES = c("Distance", "Density", "Position",
+             "u", "v", "w", 
+             "u", "v", "w", 
+             "Total duration")
+  linesep3 = c('','','\\addlinespace')
+  DATA %>% 
+    select(-data, -mean_stress, -summarised_data, -mean_tke) %>% 
+    mutate_at(vars(u_mean:w_sd), funs(100 * .)) %>% 
+    group_by(Hz) %>% 
+    nest() %>% 
+    mutate(tables = map2(data, Hz, function(X, Hz) {
+      CAPTION = glue("Summary of data at {Hz} Hz.")
+      X %>% 
+        kable(format = "latex",
+              caption = CAPTION,
+              digits = c(0,NA,NA,2,2,2,2,2,2,4),
+              linesep = linesep3, 
+              booktabs = TRUE, 
+              longtable = TRUE,
+              col.names = CNAMES) %>% 
+        kable_styling(latex_options = c('HOLD_position', 'repeat_header'),
+                      font_size = 7) %>% 
+        add_header_above(header = c(" " = 3, 
+                                    "Mean ($\\\\text{cm}~\\\\text{s}^{-1}$)" = 3, 
+                                    "Std. Dev. ($\\\\text{cm}~\\\\text{s}^{-1}$)" = 3), escape = FALSE) 
+    })) %>% pull(tables)
+  # mutate_at(vars(u_mean:w_sd), funs(sprintf("%.2f",.))) %>% 
+  
+}
+print_quadrant_summary = function(HSIZE) {
+  DATA = get(glue("data_{HSIZE}"))
+  CNAMES = c("Density", "Quadrant", "Event",
+             "Duration","Stress", "TKE","Stress fraction", "TKE fraction", 
+             "Events", "Proportion")
+  linesep3 = c('', '','','\\addlinespace')
+  DATA %>% 
+    select(-data, -(u_mean:w_sd), -total_time) %>% 
+    unnest(summarised_data) %>% 
+    group_by(Hz, Distance, Position) %>% 
+    nest() %>% 
+    mutate(tables = pmap(list(data, Hz, Distance, as.character(Position)), function(X, Hz, Distance, Position) {
+      if(str_detect(Position, "edge")) {
+        CAP = "at the edge of the canopy,"
+      } else if(str_detect(Position, "Above")) {
+        CAP = "above the canopy,"
+      } else if(str_detect(Position, "Within")) {
+        CAP = "within the canopy,"
+      } else {CAP = "ERROR"}
+      
+      CAPTION = glue("Quadrant analysis summary for a hole size of {HSIZE} {CAP} at a flow speed setting of {Hz} Hz and a distance of {Distance} cm from the leading edge.") 
+      X %>% 
+        select(Density, Quadrant, Event, Duration, Stress, TKE, Stress_fraction, TKE_fraction, Events, Proportion) %>% 
+        mutate(Stress = round(10e6 * Stress),
+               TKE =    round(10e6 * TKE)) %>% 
+        kable(format = "latex",
+              caption = CAPTION,
+              linesep = linesep3,
+              col.names = CNAMES,
+              digits = 3, booktabs = TRUE, longtable = TRUE) %>% 
+        kable_styling(latex_options = c('HOLD_position', 'repeat_header'),
+                      font_size = 7) %>% 
+        add_header_above(header = c(" "=4,
+                                    "$\\\\times 10^6$" = 2), escape = FALSE)
+    } )) %>% pull(tables)
+}
+```
+
+Functions for making plots.
+
+```{r plotting_functions, cache = F}
+make_the_plot = function(X, value, multiplier = 1, ylabel="", xlabel="Hole") {
+  evalute_this = enquo(value)
+  forplot = X %>% mutate(val = !!evalute_this * multiplier)
+  max_hole = forplot %>% pull(hole) %>% max()
+  max_y = forplot %>% pull(val) %>% pretty() %>% max()
+  
+  TITLE = X %>% slice(1) %>% 
+    mutate(TITLE = glue("{Position} and {str_to_lower(Density)} density, {Distance} cm from leading edge at {Hz} Hz.")) %>% 
+    pull(TITLE)
+  
+  q1 = 
+    forplot %>% 
+    filter(str_detect(Event, "Outward")) %>% 
+    ggplot(aes(x = hole, 
+               y = val, 
+               color = Density)) +
+    geom_point() +
+    geom_line() +
+    annotate("text",
+             x = max_hole, y = max_y,
+             hjust = 1,
+             vjust = 1,
+             label = "Quadrant I (Outward interactions)") +
+    scale_color_brewer(palette = "Dark2") +
+    scale_y_continuous("", 
+                       limits = c(0, max_y),
+                       breaks = seq(0, max_y, length = 3),
+                       labels = function(x) {rep(" ", length(x))}) +
+    scale_x_continuous("", 
+                       limits = c(0, max_hole),
+                       breaks = 0:max_hole,
+                       labels = function(x) {rep(" ", length(x))}) +
+    theme(panel.border = element_rect(fill = NA, color = "black"),
+          legend.position = c(1,0.9),
+          legend.justification = c(1,1),
+          legend.title = element_blank())
+  q2 = 
+    forplot %>% 
+    filter(str_detect(Event, "Ejection")) %>% 
+    ggplot(aes(x = hole, 
+               y = val, 
+               color = Density)) +
+    geom_point() +
+    geom_line() +
+    guides(color = F) +
+    annotate("text",
+             x = max_hole, y = max_y,
+             hjust = 0,
+             vjust = 1,
+             label = "Quadrant II (Ejections)") +
+    scale_color_brewer(palette = "Dark2") +
+    scale_y_continuous(ylabel, 
+                       limits = c(0, max_y),
+                       breaks = seq(0, max_y, length = 3)) +
+    scale_x_reverse("",
+                    limits = c(max_hole, 0),
+                    breaks = max_hole:0,
+                    labels = function(x) {rep(" ", length(x))}) +
+    theme(panel.border = element_rect(fill = NA, color = "black"))
+  q3 = 
+    forplot %>% 
+    filter(str_detect(Event, "Inward")) %>% 
+    ggplot(aes(x = hole, 
+               y = val, 
+               color = Density)) +
+    geom_point() +
+    geom_line() +
+    guides(color = F) +
+    annotate("text",
+             x = max_hole, y = max_y,
+             hjust = 0,
+             vjust = 0,
+             label = "Quadrant III (Inward interactions)") +
+    scale_color_brewer(palette = "Dark2") +
+    scale_x_reverse(xlabel, 
+                    limits = c(max_hole, 0),
+                    breaks = max_hole:0) +
+    scale_y_reverse(ylabel, 
+                    limits = c(max_y, 0),
+                    breaks = seq(max_y, 0, length = 3)) +
+    theme(panel.border = element_rect(fill = NA, color = "black"))
+  q4 = 
+    forplot %>% 
+    filter(str_detect(Event, "Sweep")) %>% 
+    ggplot(aes(x = hole, 
+               y = val, 
+               color = Density)) +
+    geom_point() +
+    geom_line() +
+    guides(color = F) +
+    annotate("text",
+             x = max_hole, y = max_y,
+             hjust = 1,
+             vjust = 0,
+             label = "Quadrant IV (Sweeps)") +
+    scale_color_brewer(palette = "Dark2") +
+    scale_x_continuous(xlabel, 
+                       limits = c(0, max_hole),
+                       breaks = 0:max_hole) +
+    scale_y_reverse(" ",
+                    limits = c(max_y, 0),
+                    breaks = seq(max_y,0, length = 3),
+                    labels = function(x) {rep(" ", length(x))}) +
+    theme(panel.border = element_rect(fill = NA, color = "black"))
+  
+  g1 = ggplotGrob(q1)
+  g2 = ggplotGrob(q2)
+  g3 = ggplotGrob(q3)
+  g4 = ggplotGrob(q4)
+  g1$widths = grid::unit.pmax(g1$widths, g2$widths, g3$widths, g3$widths)
+  g2$widths = grid::unit.pmax(g1$widths, g2$widths, g3$widths, g3$widths)
+  g3$widths = grid::unit.pmax(g1$widths, g2$widths, g3$widths, g3$widths)
+  g4$widths = grid::unit.pmax(g1$widths, g2$widths, g3$widths, g3$widths)
+  gt = grid::textGrob(TITLE, x = 0.1, y = 0.5, hjust = 0,vjust = 0.5)
+  mat = rbind(c(1,1),
+              c(2,3),
+              c(4,5))
+  
+  arrangeGrob(gt, g2, g1, g3, g4,
+              layout_matrix = mat,
+              heights = grid::unit(c(1,3,3), c("null", "null", "null")))
+}
+savegrid = function(event) {
+  function(x, position, hz, distance) {
+    fname = glue("./PDF_plots/{event}_plots_{str_replace(str_to_lower(position), ' ', '-')}_{sprintf('%03d', hz *  10)}_{distance}.pdf")
+    ggsave(fname, x, height = 200, width = 200, units = "mm")
+  }
+  
+}
+
+value_hz_plots = function(variable){
+  function(data) {
+      evaluate_this = enquo(variable)
+     if(str_detect(quo_name(evaluate_this), "TKE$|Stress$")) {
+      ylabel = glue("{VALUE}~({{}}%*%~10^6)", 
+                    VALUE = quo_name(evaluate_this))
+      ylabel = eval(parse(text = ylabel))
+    } else {
+      ylabel = str_replace(quo_name(evaluate_this), pattern = "_", " ")
+    }
+    event = data %>% pull(Event) %>% unique() %>% as.character()
+    pos = data %>% pull(Position) %>% unique() %>% as.character()
+    ggplot(data = data, aes(x=Hz, y=!!evaluate_this, color = Density)) +
+      geom_point() +
+      geom_line() +
+      scale_y_continuous(ylabel) +
+      scale_color_brewer(palette = "Dark2") +
+      facet_rep_grid(Distance ~ hole) +
+      ggtitle(glue("{pos} {str_to_lower(event)}s")) +
+      theme(legend.position = c(1,1),
+            legend.justification = c(1,1),
+            legend.background = element_blank(),
+            plot.title = element_text(hjust = 0),
+            axis.line = element_line())
+  }
+}
+value_hz_plot_group = function(variable) {
+  function(data) {
+    evaluate_this = enquo(variable)
+    if(str_detect(quo_name(evaluate_this), "TKE$|Stress$")) {
+      ylabel = glue("{VALUE}~({{}}%*%~10^6)", 
+                    VALUE = quo_name(evaluate_this))
+      ylabel = eval(parse(text = ylabel))
+    } else {
+      ylabel = str_replace(quo_name(evaluate_this), pattern = "_", " ")
+    }
+    event = data %>% pull(Event) %>% unique() %>% as.character()
+    data %>% 
+      mutate(g = ifelse(Distance < 0, 1, 2)) %>% 
+      mutate(Location = factor(g, label = c("Upstream", "Canopy"))) %>%
+      group_by(Location, Event, Density, Hz, hole) %>% 
+      summarise(SE = sd(!!evaluate_this)/sqrt(length(!!evaluate_this) -1), 
+                MEAN = mean(!!evaluate_this)) %>% 
+      ggplot(aes(x=Hz, 
+               y=MEAN, color=Location)) +
+      geom_point() +
+      geom_line() +
+      geom_errorbar(aes(ymin = MEAN - SE, 
+                        ymax = MEAN + SE), width = 0)+
+      scale_y_continuous(ylabel) +
+      scale_color_brewer(palette = "Dark2") +
+      facet_rep_grid(Density ~ hole) +
+      ggtitle(glue("{event}s upstream and at the canopy")) +
+      theme(legend.position = c(1,1),
+            legend.justification = c(1,1),
+            legend.background = element_blank(),
+            plot.title = element_text(hjust = 0),
+            axis.line = element_line())
+  }
+}
+value_hz_both_plot = function(variable) { 
+  function(data) {
+    evaluate_this = enquo(variable)
+    if(str_detect(quo_name(evaluate_this), "TKE$|Stress$")) {
+      ylabel = glue("{VALUE}~({{}}%*%~10^6)", 
+                    VALUE = quo_name(evaluate_this))
+      ylabel = eval(parse(text = ylabel))
+    } else {
+      ylabel = str_replace(quo_name(evaluate_this), pattern = "_", " ")
+    }
+    pos = data %>% pull(Position) %>% unique() %>% as.character()
+    data %>% 
+      group_by(hole, Distance, Density, Hz, Position) %>% 
+      summarise(SUM = sum(!!evaluate_this)) %>% 
+      ggplot(aes(x=Hz, y=SUM, color = Density)) +
+      geom_point() +
+      geom_line() +
+      scale_y_continuous(ylabel) +
+      scale_color_brewer(palette = "Dark2") +
+      facet_rep_grid(Distance ~ hole) +
+      ggtitle(glue("{pos} sweeps and ejections")) +
+      theme(legend.position = c(1,1),
+            legend.justification = c(1,1),
+            legend.background = element_blank(),
+            plot.title = element_text(hjust = 0),
+            axis.line = element_line())
+  }
+}
+value_hz_both_plot_group = function(variable) {
+  function(data) {
+    evaluate_this = enquo(variable)
+    if(str_detect(quo_name(evaluate_this), "TKE$|Stress$")) {
+      ylabel = glue("{VALUE}~({{}}%*%~10^6)", 
+                    VALUE = quo_name(evaluate_this))
+      ylabel = eval(parse(text = ylabel))
+    } else {
+      ylabel = str_replace(quo_name(evaluate_this), pattern = "_", " ")
+    }
+    event = data %>% pull(Event) %>% unique() %>% as.character()
+    data %>% 
+      group_by(hole, Distance, Density, Hz, Position) %>% 
+      summarise(SUM = sum(!!evaluate_this)) %>% ungroup() %>% 
+      mutate(g = ifelse(Distance < 0, 1, 2)) %>% 
+      mutate(Location = factor(g, label = c("Upstream", "Canopy"))) %>%
+      group_by(Location, Density, Hz, hole) %>% 
+      summarise(SE = sd(SUM)/sqrt(length(SUM) -1), 
+                SUM = mean(SUM)) %>% 
+      ggplot(aes(x=Hz, y=SUM, color=Location)) +
+      geom_point() +
+      geom_line() +
+      geom_errorbar(aes(ymin = SUM - SE, ymax = SUM + SE), width = 0)+
+      scale_y_continuous(ylabel) +
+      scale_color_brewer(palette = "Dark2") +
+      facet_rep_grid(Density ~ hole) +
+      ggtitle("Sweeps and ejections upstream and at the canopy") +
+      theme(legend.position = c(1,1),
+            legend.justification = c(1,1),
+            legend.background = element_blank(),
+            plot.title = element_text(hjust = 0),
+            axis.line = element_line())    
+  }
+}
+value_distance_both_plot = function(variable) {
+  function(data) {
+    evaluate_this = enquo(variable)
+    if(str_detect(quo_name(evaluate_this), "TKE$|Stress$")) {
+      ylabel = glue("{VALUE}~({{}}%*%~10^6)", 
+                    VALUE = quo_name(evaluate_this))
+      ylabel = eval(parse(text = ylabel))
+    } else {
+      ylabel = str_replace(quo_name(evaluate_this), pattern = "_", " ")
+    }
+    hole = data %>% slice(1) %>% pull(hole)
+    Position = data %>% slice(1) %>% pull(Position)
+    if(str_detect(Position, "edge")) {
+      CAP = "at the edge of the canopy,"
+    } else if(str_detect(Position, "Above")) {
+      CAP = "above the canopy,"
+    } else if(str_detect(Position, "Within")) {
+      CAP = "within the canopy,"
+    } else {CAP = "ERROR"}
+    TITLE = glue("{VALUE} {CAP} at a holesize of {hole}", 
+                 VALUE = quo_name(evaluate_this))
+    data %>% 
+      ggplot(aes(x=Distance,
+                 y = !!evaluate_this, 
+                 color = Event)) +
+      geom_point() + 
+      geom_line() +
+      scale_color_brewer(palette = "Dark2") +
+      scale_y_continuous(ylabel) +
+      facet_rep_grid(Density~Hz) +
+      ggtitle(TITLE) +
+      theme(legend.position = c(0,1),
+            legend.justification = c(0,1),
+            legend.background = element_blank(),
+            plot.title = element_text(hjust = 0),
+            axis.line = element_line())
+  }
+}
+
+TKE_distance_both_plot = value_distance_both_plot(TKE)
+Stress_distance_both_plot = value_distance_both_plot(Stress)
+Duration_distance_both_plot = value_distance_both_plot(Duration)
+TKE_fraction_distance_both_plot = 
+  value_distance_both_plot(TKE_fraction)
+Stress_fraction_distance_both_plot =
+  value_distance_both_plot(Stress_fraction)
+
+TKE_plot      = value_hz_plots(TKE)
+Stress_plot   = value_hz_plots(Stress)
+Duration_plot = value_hz_plots(Duration)
+Stress_fraction_plot = value_hz_plots(Stress_fraction)
+TKE_fraction_plot = value_hz_plots(TKE_fraction)
+
+TKE_plot_group = value_hz_plot_group(TKE)
+Stress_plot_group = value_hz_plot_group(Stress)
+Duration_plot_group = value_hz_plot_group(Duration)
+Stress_fraction_plot_group = value_hz_plot_group(Stress_fraction)
+TKE_fraction_plot_group = value_hz_plot_group(TKE_fraction)
+
+TKE_both_plot = value_hz_both_plot(TKE)
+Stress_both_plot = value_hz_both_plot(Stress)
+Duration_both_plot = value_hz_both_plot(Duration)
+Stress_fraction_both_plot = value_hz_both_plot(Stress_fraction)
+TKE_fraction_both_plot = value_hz_both_plot(TKE_fraction)
+
+TKE_both_plot_group = value_hz_both_plot_group(TKE)
+Stress_both_plot_group = value_hz_both_plot_group(Stress)
+Duration_both_plot_group = value_hz_both_plot_group(Duration)
+TKE_fraction_both_plot_group = value_hz_both_plot_group(TKE_fraction)
+Stress_fraction_both_plot_group = value_hz_both_plot_group(Stress_fraction)
+```
+
+# Process data
+
+After nesting the data frames, the data is processed to
+determine the events at hole sizes of 0, 1, 2, 3, and 4.
+
+```{r process1, cache = TRUE}
+out =
+  out %>%
+  group_by(Hz, Depth, Distance, Density) %>%
+  nest()
+```
+
+```{r quadrat, cache = TRUE}
+data_0 = run_analysis(HSIZE = 0, out = out, testrun = FALSE)
+data_1 = run_analysis(HSIZE = 1, out = out, testrun = FALSE)
+data_2 = run_analysis(HSIZE = 2, out = out, testrun = FALSE)
+data_3 = run_analysis(HSIZE = 3, out = out, testrun = FALSE)
+data_4 = run_analysis(HSIZE = 4, out = out, testrun = FALSE)
+```
+
+\clearpage
+
+# Quadrant analysis
+
+## Tables of velocity statistics
+
+```{r, cache=FALSE, results = 'asis'}
+table_of_data = print_data_summary()
+for(n in 1:length(table_of_data)) {
+  table_of_data[[n]] %>% print()
+  cat("\n\\clearpage\n")
+}
+```
+
+## Tables of quadrant statistics for a hole size of 0
+
+```{r, cache=FALSE, results = 'asis'}
+table_of_data = print_quadrant_summary(HSIZE = 0)
+for(n in 1:length(table_of_data)) {
+  table_of_data[[n]] %>% print()
+  cat("\n\\clearpage\n")
+}
+```
+
+## Tables of quadrant statistics for a hole size of 1
+
+```{r, cache=FALSE, results = 'asis'}
+table_of_data = print_quadrant_summary(HSIZE = 1)
+for(n in 1:length(table_of_data)) {
+  table_of_data[[n]] %>% print()
+  cat("\n\\clearpage\n")
+}
+```
+
+## Tables of quadrant statistics for a hole size of 2
+
+```{r, cache=FALSE, results = 'asis'}
+table_of_data = print_quadrant_summary(HSIZE = 2)
+for(n in 1:length(table_of_data)) {
+  table_of_data[[n]] %>% print()
+  cat("\n\\clearpage\n")
+}
+```
+
+## Tables of quadrant statistics for a hole size of 3
+
+```{r, cache=FALSE, results = 'asis'}
+table_of_data = print_quadrant_summary(HSIZE = 3)
+for(n in 1:length(table_of_data)) {
+  table_of_data[[n]] %>% print()
+  cat("\n\\clearpage\n")
+}
+```
+
+## Tables of quadrant statistics for a hole size of 4
+
+```{r, cache=FALSE, results = 'asis'}
+table_of_data = print_quadrant_summary(HSIZE = 4)
+for(n in 1:length(table_of_data)) {
+  table_of_data[[n]] %>% print()
+  cat("\n\\clearpage\n")
+}
+```
+
+\clearpage
+
+# Plots of quadrant data
+
+```{r combine_quad_data}
+combined_quadrant_data = 
+  data_frame(hole = 0:4) %>% 
+  mutate(x = glue("data_{hole}")) %>% 
+  mutate(x = map(x, get, env = globalenv())) %>% 
+  unnest() %>%
+  select(-data, -(u_mean:total_time)) %>% 
+  unnest() %>% 
+  mutate(TKE = TKE * 1000000,
+         Stress = Stress * 1000000)
+write_csv(combined_quadrant_data, 
+          "Modified_Data/all_quadrant_data.csv")
+```
+
+```{r calculate_duration, eval = TRUE, cache = TRUE}
+H = combined_quadrant_data %>% pull(Hz) %>% unique() %>% sort()
+P = combined_quadrant_data %>% pull(Position) %>% levels()
+
+out_duration = 
+  combined_quadrant_data %>% 
+  group_by(Position, Hz, Distance) %>% 
+  do(plots = make_the_plot(X = ., 
+                           Duration, multiplier = 1, ylabel = "Duration"))
+out_tke = 
+  combined_quadrant_data %>% 
+  group_by(Position, Hz, Distance) %>% 
+  do(plots = make_the_plot(X = ., 
+                           TKE, multiplier = 1, ylabel = "TKE"))
+
+out_stress = 
+  combined_quadrant_data %>% 
+  group_by(Position, Hz, Distance) %>% 
+  do(plots = make_the_plot(X = ., 
+                           Stress, multiplier = 1, ylabel = "Stress"))
+
+out_events = 
+  combined_quadrant_data %>% 
+  group_by(Position, Hz, Distance) %>% 
+  do(plots = make_the_plot(X = ., 
+                           Events, multiplier = 1, ylabel = "Number of events"))
+out_proportion = 
+  combined_quadrant_data %>% 
+  group_by(Position, Hz, Distance) %>% 
+  do(plots = make_the_plot(X = ., 
+                           Proportion, multiplier = 1, ylabel = "Proportion of events"))
+
+```
+
+```{r saveplots, include = FALSE, cache = TRUE}
+savegrid_duration = savegrid("duration")
+for(j in seq_along(P)) {
+  Pi = P[j]
+  for(k in seq_along(H)){
+    out_duration %>% 
+      filter(str_detect(Position, Pi), Hz == H[k]) %>% 
+      do(out = savegrid_duration(.$plots, .$Position, .$Hz, .$Distance))
+    Sys.sleep(0.5)
+  }
+}
+
+savegrid_tke = savegrid("tke")
+for(j in seq_along(P)) {
+  Pi = P[j]
+  for(k in seq_along(H)){
+    out_tke %>% 
+      filter(str_detect(Position, Pi), Hz == H[k]) %>% 
+      do(out = savegrid_tke(.$plots, .$Position, .$Hz, .$Distance))
+  }
+}
+
+savegrid_stress = savegrid("stress")
+for(j in seq_along(P)) {
+  Pi = P[j]
+  for(k in seq_along(H)){
+    out_stress %>% 
+      filter(str_detect(Position, Pi), Hz == H[k]) %>% 
+      do(out = savegrid_stress(.$plots, .$Position, .$Hz, .$Distance))
+  }
+}
+
+savegrid_events = savegrid("events")
+for(j in seq_along(P)) {
+  Pi = P[j]
+  for(k in seq_along(H)){
+    out_events %>% 
+      filter(str_detect(Position, Pi), Hz == H[k]) %>% 
+      do(out = savegrid_events(.$plots, .$Position, .$Hz, .$Distance))
+  }
+}
+
+savegrid_proportion = savegrid("proportion")
+for(j in seq_along(P)) {
+  Pi = P[j]
+  for(k in seq_along(H)){
+    out_proportion %>% 
+      filter(str_detect(Position, Pi), Hz == H[k]) %>% 
+      do(out = savegrid_proportion(.$plots, .$Position, .$Hz, .$Distance))
+  }
+}
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the number of events over hole size above the canopy."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+fnames = dir("PDF_plots/", pattern = "events", full = TRUE)
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)])
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the number of events over hole size at the canopy edge."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)+32])
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the number of events over hole size within the canopy."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)+32+32])
+```
+
+## Plots of the proportion of events
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the proportion of events over hole size above the canopy."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+fnames = dir("PDF_plots/", pattern = "proportion", full = TRUE)
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)])
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the proportion of events over hole size at the canopy edge."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)+32])
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the proportion of events over hole size within the canopy."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)+32+32])
+```
+
+## Plots of stress
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the negative momentum stress over hole size above the canopy."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+fnames = dir("PDF_plots/", pattern = "stress", full = TRUE)
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)])
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the negative momentum stress over hole size at the canopy edge."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)+32])
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the negative momentum stress over hole size within the canopy."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)+32+32])
+```
+
+## Plots of total kinetic energy
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the total kinetic energy over hole size above the canopy."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+fnames = dir("PDF_plots/", pattern = "tke", full = TRUE)
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)])
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the total kinetic energy over hole size at the canopy edge."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)+32])
+```
+
+```{r, include=FALSE}
+FIGCAP = "Variation in the total kinetic energy over hole size within the canopy."
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 2, fig.show = "hold"}
+include_graphics(fnames[c(1,5,2,6,3,7,4,8)+8+8+32+32])
+```
+
+```{r, fig.cap = FIGCAP, out.width="40%", out.height="40%", fig.ncol = 1, fig.show = "hold"}
+include_graphics(fnames[c(29,30,31,32)+32+32])
+```
+
+# Total kinetic energy analysis
+
+```{r, fig.cap = "Variation in total kinetic energy of the ejections with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  mutate(TKE = TKE) %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_plot()
+
+combined_quadrant_data %>% 
+  mutate(TKE = TKE) %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_plot
+
+combined_quadrant_data %>% 
+  mutate(TKE = TKE) %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean total kinetic energy upstream of the ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_plot_group()
+
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_plot_group()
+```
+
+```{r, fig.cap = "Variation in total kinetic energy of the sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  mutate(TKE = TKE) %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_plot()
+
+combined_quadrant_data %>% 
+  mutate(TKE = TKE) %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_plot()
+
+combined_quadrant_data %>% 
+  mutate(TKE = TKE) %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_plot()
+```
+
+```{r, fig.cap = "Variation in mean total kinetic energy upstream of the sweeps upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_plot_group()
+```
+
+```{r, fig.cap = "Variation in total kinetic energy of the both the ejections and sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_both_plot()
+
+combined_quadrant_data %>% 
+  mutate(TKE = TKE) %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_both_plot()
+
+combined_quadrant_data %>% 
+  mutate(TKE = TKE) %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_both_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean total kinetic energy of the sweeps and ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_both_plot_group()
+```
+
+```{r, fig.cap = "Variation in mean total kinetic energy of the sweeps and ejections upstream and at the canopy with Hz for a hole size of 0 and 4.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  TKE_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  TKE_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  TKE_both_plot_group()
+```
+
+# Negative momentum stress analysis
+
+```{r, fig.cap = "Variation in negative momentum flux of the ejections with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean negative momentum flux upstream of the ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_plot_group()
+
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_plot_group()
+```
+
+```{r, fig.cap = "Variation in negative momentum flux of the sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_plot()
+```
+
+```{r, fig.cap = "Variation in mean negative momentum flux upstream of the sweeps upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  mutate(g = ifelse(Distance < 0, 1, 2)) %>% 
+  mutate(Location = factor(g, label = c("Upstream", "Canopy"))) %>%
+  Stress_plot_group()
+```
+
+
+```{r, fig.cap = "Variation in negative momentum flux of the both the ejections and sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_both_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean negative momentum flux of the sweeps and ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_both_plot_group()
+```
+
+```{r, fig.cap = "Variation in mean negative momentum flux of the sweeps and ejections upstream and at the canopy with Hz for a hole size of 0 and 4.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Stress_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Stress_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Stress_both_plot_group()
+```
+
+# Event duration analysis
+
+```{r, fig.cap = "Variation in duration of the ejections with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Duration_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Duration_plot
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Duration_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean duration upstream of the ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Duration_plot_group()
+
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Duration_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  Duration_plot_group()
+```
+
+```{r, fig.cap = "Variation in duration of the sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Duration_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Duration_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Duration_plot()
+```
+
+```{r, fig.cap = "Variation in mean duration upstream of the sweeps upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Duration_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Duration_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  Duration_plot_group()
+```
+
+
+```{r, fig.cap = "Variation in duration of the both the ejections and sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Duration_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Duration_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Duration_both_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean duration of the sweeps and ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Duration_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Duration_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  Duration_both_plot_group()
+```
+
+```{r, fig.cap = "Variation in mean duration of the sweeps and ejections upstream and at the canopy with Hz for a hole size of 0 and 4.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Duration_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Duration_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Duration_both_plot_group()
+```
+
+# Stress fraction analysis
+
+```{r, fig.cap = "Variation in stress fraction of the ejections with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_fraction_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_fraction_plot
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_fraction_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean stress fraction upstream of the ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_fraction_plot_group()
+
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_fraction_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_fraction_plot_group()
+```
+
+```{r, fig.cap = "Variation in stress fraction of the sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_fraction_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_fraction_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_fraction_plot()
+```
+
+```{r, fig.cap = "Variation in mean stress fraction upstream of the sweeps upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_fraction_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_fraction_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_fraction_plot_group()
+```
+
+
+```{r, fig.cap = "Variation in stress fraction of the both the ejections and sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_fraction_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_fraction_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_fraction_both_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean stress fraction of the sweeps and ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  Stress_fraction_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  Stress_fraction_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  Stress_fraction_both_plot_group()
+```
+
+```{r, fig.cap = "Variation in mean stress fraction of the sweeps and ejections upstream and at the canopy with Hz for a hole size of 0 and 4.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Stress_fraction_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Stress_fraction_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  Stress_fraction_both_plot_group()
+```
+
+# TKE fraction analysis
+
+```{r, fig.cap = "Variation in TKE fraction of the ejections with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_fraction_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_fraction_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_fraction_plot()
+
+```
+
+```{r, fig.cap = "Variation in mean TKE fraction upstream of the ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_fraction_plot_group()
+
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_fraction_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_fraction_plot_group()
+```
+
+```{r, fig.cap = "Variation in TKE fraction of the sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_fraction_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_fraction_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_fraction_plot()
+```
+
+```{r, fig.cap = "Variation in mean TKE fraction upstream of the sweeps upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_fraction_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_fraction_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_fraction_plot_group()
+```
+
+
+```{r, fig.cap = "Variation in TKE fraction of the both the ejections and sweeps with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_fraction_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_fraction_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>% 
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_fraction_both_plot()
+```
+
+```{r, fig.cap = "Variation in mean TKE fraction of the sweeps and ejections upstream and at the canopy with Hz.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  TKE_fraction_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  TKE_fraction_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  TKE_fraction_both_plot_group()
+```
+
+```{r, fig.cap = "Variation in mean TKE fraction of the sweeps and ejections upstream and at the canopy with Hz for a hole size of 0 and 4.", out.width="50%", out.height="50%", fig.ncol = 1, fig.show = "hold"}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Above")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  TKE_fraction_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "edge")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  TKE_fraction_both_plot_group()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole %in% c(0,4)) %>% 
+  TKE_fraction_both_plot_group()
+```
+
+# Events across the canopy length
+
+```{r, fig.cap = "Variation in TKE along the length of the canopy at a hole size of 0, 2, and 4.", fig.ncol = 1, fig.show = "hold", fig.height=6, fig.width=16}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 0) %>% 
+  TKE_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 2) %>% 
+  TKE_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 4) %>% 
+  TKE_distance_both_plot()
+```
+
+```{r, fig.cap = "Variation in negative momentum flux along the length of the canopy at a hole size of 0, 2, and 4.", fig.ncol = 1, fig.show = "hold", fig.height=6, fig.width=16}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 0) %>% 
+  Stress_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 2) %>% 
+  Stress_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 4) %>% 
+  Stress_distance_both_plot()
+```
+
+```{r, fig.cap = "Variation in duration of events along the length of the canopy at a hole size of 0, 2, and 4.",  fig.ncol = 1, fig.show = "hold", fig.height=6, fig.width=16}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 0) %>% 
+  Duration_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 2) %>% 
+  Duration_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 4) %>% 
+  Duration_distance_both_plot()
+```
+
+```{r, fig.cap = "Variation in TKE fraction along the length of the canopy at a hole size of 0, 2, and 4.", fig.ncol = 1, fig.show = "hold", fig.height=6, fig.width=16}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 0) %>% 
+  TKE_fraction_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 2) %>% 
+  TKE_fraction_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 4) %>% 
+  TKE_fraction_distance_both_plot()
+```
+
+```{r, fig.cap = "Variation in stress fraction along the length of the canopy at a hole size of 0, 2, and 4.", fig.ncol = 1, fig.show = "hold", fig.height=6, fig.width=16}
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 0) %>% 
+  Stress_fraction_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 2) %>% 
+  Stress_fraction_distance_both_plot()
+
+combined_quadrant_data %>% 
+  filter(str_detect(Event, "Ejection|Sweep")) %>%
+  filter(str_detect(Position, "Within")) %>% 
+  filter(hole == 4) %>% 
+  Stress_fraction_distance_both_plot()
+```
+
+

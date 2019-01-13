@@ -1,0 +1,44 @@
+\usepackage{xeCJK}
+\usepackage{float}
+% Setup Japanese Fonts
+\setCJKmainfont{Noto Sans CJK JP}
+%\setCJKmonofont{Noto Sans Mono CJK JP}
+\setCJKsansfont{Noto Sans CJK JP}
+\setromanfont[Mapping=tex-text]{Noto Serif}
+\setsansfont[Scale=MatchLowercase,Mapping=tex-text]{Noto Sans}
+%\setmonofont[Scale=MatchLowercase]{Source Code Pro}
+\usepackage{sourcecodepro}
+\makeatletter
+\defaultfontfeatures[\ttfamily]
+       {
+        Numbers   = \sourcecodepro@figurestyle ,
+        Scale     = \SourceCodePro@scale ,
+        Extension = .otf }
+
+    % Monospace font
+        \setmonofont
+            [ UprightFont    = *-\sourcecodepro@regstyle ,
+              ItalicFont     = *-\sourcecodepro@regstyle It ,
+              BoldFont       = *-\sourcecodepro@boldstyle ,
+              BoldItalicFont = *-\sourcecodepro@boldstyle It,
+              Scale=MatchLowercase]
+            {SourceCodePro}
+\makeatother
+%\publisher{GNN} %
+%\providecommand{\XeLaTeX}{X\lower.5ex\hbox{\kern-0.15em\reflectbox{E}}\kern-0.1em\LaTeX}
+%\newcommand{\tXeLaTeX}{\XeLaTeX\index{XeLaTeX@\protect\XeLaTeX}}
+
+% 日本語を含む段落を行分割するための設定
+\XeTeXlinebreaklocale "ja"
+
+% 簡易レイアウト設定
+\DeclareTextCommand{\nobreakspace}{T1}{\leavevmode\nobreak\ }
+\setlength{\parindent}{1em}
+\mathchardef\mhyphen="2D
+
+\usepackage{booktabs}
+\usepackage{longtable}
+
+
+
+

@@ -1,0 +1,17 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.dat
+*.hdr
+*.csv
+*.png
+*.jpg
+*_cache
+*_file
+*.rda
+*.mp4
+*_plots
+Data/
+*_files
+*_cache
