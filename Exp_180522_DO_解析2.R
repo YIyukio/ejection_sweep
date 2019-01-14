@@ -5,6 +5,7 @@
 #' output: html_document
 #' ---
 
+#変更
 library(tidyverse)
 library(lubridate)
 library(gridExtra)
@@ -14,7 +15,7 @@ library(grid)
 library(scales)
 library(stringr)
 library(xtable)
-library(marelac) # for estimating Saturation concentration of Oxygen in water  
+library(marelac) # for estimating Saturation concentration of Oxygen in water
 
 ## データの読み込み------------------------------------------
 fname = dir("../回流水槽光合成実験5/Data/DO/", pattern = "csv", full = T)
@@ -22,8 +23,8 @@ ID = read.csv(fname[1], header = T)
 Trident = read.csv(fname[2], header = T, skip = 5,fileEncoding = "sjis" )
 
 Trident = Trident %>%
-  tidyr::unite(DATE, TIME, col = "Time", sep = " ") %>% 
-  select(Time, ID = 3, Barometer = 6, DO = 8, Temp = 9, Sal = 12) %>% 
+  tidyr::unite(DATE, TIME, col = "Time", sep = " ") %>%
+  select(Time, ID = 3, Barometer = 6, DO = 8, Temp = 9, Sal = 12) %>%
   mutate(Time = as.POSIXct(Time), Date = as.POSIXct(round(Time, "mins")))
 
 fg_DO_Trident = ggplot(Trident)+
@@ -32,18 +33,18 @@ fg_DO_Trident = ggplot(Trident)+
 fg_DO_Trident
 
 #データに実験条件の情報を追加:IDのファイルを結合---------------------------------------------------------------------------------
-Time_ID = ID %>% 
+Time_ID = ID %>%
   select(ID, Hz, Density, Light, starttime = Exp_start_time, endtime = Exp_end_time) %>%
-  mutate_at(.vars = c("starttime", "endtime"), .funs = as.POSIXct) %>% 
-  arrange(starttime, endtime, Light) %>% 
+  mutate_at(.vars = c("starttime", "endtime"), .funs = as.POSIXct) %>%
+  arrange(starttime, endtime, Light) %>%
   select(ID, Hz, Density, Light, starttime, endtime)
 
 Time_ID2 = Time_ID
 Time_ID = Time_ID %>%
-  filter(!Density %in% c("High") | !ID %in% c(5,6,1,2,9,10)) %>% 
-  filter(!Density %in% c("Low") | !ID %in% c()) %>% 
-  filter(!Density %in% c("Middle") | !ID %in% c()) 
-  
+  filter(!Density %in% c("High") | !ID %in% c(5,6,1,2,9,10)) %>%
+  filter(!Density %in% c("Low") | !ID %in% c()) %>%
+  filter(!Density %in% c("Middle") | !ID %in% c())
+
 Trident$Hz = NA
 Trident$Light = NA
 Trident$Density = NA
@@ -63,11 +64,11 @@ for (i in 1:nrow(Time_ID)) {
 }
 
 Trident = Trident %>%
-  filter(!Hz == is.na(Hz)) %>% 
+  filter(!Hz == is.na(Hz)) %>%
   group_by(ID, Hz, Light, Density) %>%
-  arrange(Density, Hz, Light, Time) %>% 
+  arrange(Density, Hz, Light, Time) %>%
   mutate(Elapsed_time = as.integer((Date - min(Date)))/60,
-         N = row_number()) %>% 
+         N = row_number()) %>%
   filter(Elapsed_time <= 40) %>%                                                  #データは1.5時間以下のみ使用
   select(ID, Hz, Light, Elapsed_time, Density, N, DO, Temp, Barometer, Sal)
 
@@ -76,7 +77,7 @@ Trident = Trident %>%
 WW_sum = data.frame(Density = c("High", "Middle", "Low"),
                     WW_sum = c(453.4, 238.5, 153.8))
 
-Trident = Trident %>% full_join(WW_sum, by = c("Density")) %>% 
+Trident = Trident %>% full_join(WW_sum, by = c("Density")) %>%
   na.omit()
 
 Trident$Density = factor(Trident$Density, levels =  c("Low", "Middle", "High"))
@@ -89,26 +90,26 @@ Glmmodel = function(y, x){
 
 Slope = function(x){　　　　　　　　　　　　　　　
   coef(x)[2]
-} 
+}
 
 Slope_error = function(x){　　　　　　　　　　　　　　　
   coef(x)[4]
-} 
+}
 
 
 #DO
 DO_analysis = Trident %>%
   group_by(ID, Hz, Light, WW_sum, Density) %>%
-  nest() %>% 
-  mutate(model = map(data, ~ glm(DO~Elapsed_time, data = ., family = Gamma(link = "log")))) %>% 
-  mutate(summary = map(model, ~summary(.))) %>% 
+  nest() %>%
+  mutate(model = map(data, ~ glm(DO~Elapsed_time, data = ., family = Gamma(link = "log")))) %>%
+  mutate(summary = map(model, ~summary(.))) %>%
   mutate(slope = map_dbl(model, ~Slope(.)),
          stderr = map_dbl(model, ~Slope_error(summary(.))),
-         out = map(model, ~coef(summary(.)))) 
+         out = map(model, ~coef(summary(.))))
 
-Exp1_DO_model = Trident %>% 
-  group_by(ID, Hz, Density, WW_sum, Light) %>% 
-  summarise(DO_Slope = Slope(Glmmodel(DO, Elapsed_time)), DO_Slope_error = Slope_error(Glmmodel(DO, Elapsed_time))) %>% 
+Exp1_DO_model = Trident %>%
+  group_by(ID, Hz, Density, WW_sum, Light) %>%
+  summarise(DO_Slope = Slope(Glmmodel(DO, Elapsed_time)), DO_Slope_error = Slope_error(Glmmodel(DO, Elapsed_time))) %>%
   mutate(DO_Slope_WW = DO_Slope / WW_sum, DO_Slope_error_WW = DO_Slope_error / WW_sum)
 
 ggplot()+
@@ -131,15 +132,15 @@ ggplot()+
 #Temp
 Temp_analysis=Trident %>%
   group_by(ID, Hz, Light, WW_sum, Density) %>%
-  nest() %>% 
-  mutate(model = map(data, ~glm(Temp~Elapsed_time, data = .))) %>% 
-  mutate(summary = map(model, ~summary(.))) %>% 
+  nest() %>%
+  mutate(model = map(data, ~glm(Temp~Elapsed_time, data = .))) %>%
+  mutate(summary = map(model, ~summary(.))) %>%
   mutate(slope = map_dbl(model, ~Slope(.)),
          stderr = map_dbl(model, ~Slope_error(summary(.))),
-         out = map(model, ~coef(summary(.)))) 
+         out = map(model, ~coef(summary(.))))
 
-Exp1_Temp_model = Trident %>% 
-  group_by(ID, Hz, Density, Light) %>% 
+Exp1_Temp_model = Trident %>%
+  group_by(ID, Hz, Density, Light) %>%
   summarise(Temp_Slope = Slope(Glmmodel(Temp, Elapsed_time)), Temp_Slope_error = Slope_error(Glmmodel(Temp, Elapsed_time)))
 
 ggplot()+
@@ -152,7 +153,7 @@ ggplot()+
 
 #大気-海水間の酸素フラックスの算出-------------------------------------------------------------
 
-Trident_flux = read.csv("../回流水槽光合成実験3/Modified_data/DO_air_water_Flux_data.csv") 
+Trident_flux = read.csv("../回流水槽光合成実験3/Modified_data/DO_air_water_Flux_data.csv")
 
 #データを用いてKの算出（ｋが負になると酸素の放出、正は吸収）-----------------------------
 library(nlstools)
@@ -197,7 +198,7 @@ df1 = df1 %>% mutate(dDO = DO_saturation  - obs)
 #   geom_smooth(aes(x=t, y=dDO),
 #               method = "gam",
 #               formula = y~s(x))
-# 
+#
 # gamout = mgcv::gam(dDO ~ s(t, k = 40), data = df1)
 # summary(gamout)
 # mdata = data_frame(t=df1$t)
@@ -210,14 +211,14 @@ df1 = df1 %>% mutate(dDO = DO_saturation  - obs)
 # ddo_finite_difference = ddo_finite_difference %*% coef(gamout) %>% as.numeric()
 # mdata = mdata %>% mutate(slope = ddo_finite_difference)
 # df1 = full_join(df1, mdata)
-# 
+#
 # ggplot(df1) +
 #   geom_point(aes(x=t, y=dDO)) +
 #   geom_smooth(aes(x=t, y=dDO),
 #               method = "gam",
 #               formula = y~s(x)) +
 #   geom_line(aes(x=t, y=slope), data = df1)
-# 
+#
 # ggplot(df1) +
 #   geom_point(aes(x=dDO, y = -slope))
 
@@ -287,12 +288,12 @@ ggplot()+
   geom_line(aes(x = Hz, y = k), data = k_pre)
 
 #kを用いてDO濃度を補正
-DO_offset_Flux = Trident %>% 
+DO_offset_Flux = Trident %>%
   mutate(DO_saturation = gas_O2sat(S = Sal, t = Temp),
-         DO_diff = DO_saturation - DO) %>% 
+         DO_diff = DO_saturation - DO) %>%
   left_join(k_pre, by = "Hz") %>%
-  mutate(DO_Flux_min = DO_diff * k) %>% 
-  group_by(ID, Hz, Light, Density) %>% 
+  mutate(DO_Flux_min = DO_diff * k) %>%
+  group_by(ID, Hz, Light, Density) %>%
   mutate(DO_Flux_min_cum = cumsum(DO_Flux_min),
          DO_offset_Flux = DO - DO_Flux_min_cum) %>%
   return()
@@ -312,17 +313,17 @@ ggplot()+
 
 xlabel = expression("Elapsed time"~"["~min~"]")
 ylabel = expression("Dissolved Oxygen"~"["~ml~L^-1~"]")
-  
+
 fg1 = ggplot(DO_offset_Flux %>% filter(Hz == 2, Light == T, Density == "High"))+
   geom_point(aes(x = Elapsed_time, y = DO_offset_Flux))+
   geom_smooth(aes(x = Elapsed_time, y = DO_offset_Flux), method = "lm", formula = y ~ x)+
   labs(x = xlabel, y = ylabel)
 
 width = 100
-height = 100   
+height = 100
 png(file = "fg_Slope_DO.png",
     type = "cairo",
-    width = width, 
+    width = width,
     height = height,
     units = "mm",
     res = 600,
@@ -331,11 +332,11 @@ fg1
 dev.off()
 
 #DO_Slopを再計算
-Exp1_DO_offset_Flux_model = DO_offset_Flux %>% 
-  group_by(ID, Hz, Density, WW_sum, Light) %>% 
+Exp1_DO_offset_Flux_model = DO_offset_Flux %>%
+  group_by(ID, Hz, Density, WW_sum, Light) %>%
   summarise(DO_Slope = Slope(Glmmodel(DO_offset_Flux, Elapsed_time)),
             DO_Slope_error = Slope_error(Glmmodel(DO_offset_Flux, Elapsed_time)),
-            Temp_mean = mean(Temp)) %>% 
+            Temp_mean = mean(Temp)) %>%
   mutate(DO_Slope_WW = DO_Slope / WW_sum, DO_Slope_error_WW = DO_Slope_error / WW_sum)
 
 ggplot()+
@@ -359,17 +360,17 @@ V = 400 #L, 容量は0.4トン、海水の比重計算が必要かも
 
 #kによる酸素フラックスの補正と総光合成速度の算出-------------------------------------------------------------------------------------
 #総光合成速度の算出:kによる補正なし
-Photosynthesis = 
-  Exp1_DO_model %>% 
-  ungroup() %>% 
-  select(ID, Hz, Density, WW_sum, Light, DO_Slope) %>% 
-  tidyr::spread(key = Light, value = DO_Slope) %>% 
-  rename(Respiration = 'FALSE', Photosynthesis_net = 'TRUE') %>% 
+Photosynthesis =
+  Exp1_DO_model %>%
+  ungroup() %>%
+  select(ID, Hz, Density, WW_sum, Light, DO_Slope) %>%
+  tidyr::spread(key = Light, value = DO_Slope) %>%
+  rename(Respiration = 'FALSE', Photosynthesis_net = 'TRUE') %>%
   mutate(Respiration = Respiration,
          Photosynthesis_gross = Photosynthesis_net - Respiration,
          Respiration_WW = Respiration / WW_sum,
          Photosynthesis_net_WW = Photosynthesis_net / WW_sum,
-         Photosynthesis_gross_WW = Photosynthesis_gross / WW_sum) %>% 
+         Photosynthesis_gross_WW = Photosynthesis_gross / WW_sum) %>%
   mutate_at(.vars = c("Respiration", "Photosynthesis_gross", "Photosynthesis_net", "Respiration_WW", "Photosynthesis_net_WW", "Photosynthesis_gross_WW"), .funs = function(x){x*V})
 
 fg_Photosynthesis = ggplot(Photosynthesis)+
@@ -391,10 +392,10 @@ fg_Photosynthesis = ggplot(Photosynthesis)+
 #   facet_wrap("Density")
 
 # GNN
-# Exp1_DO_model %>% select(ID:DO_Slope)%>% 
-#   inner_join(DO_Flux %>% select(-DO_Flux_mean, -DO_Flux_sd), by = c("ID", "Hz", "Light")) %>% 
-#   tidyr::unnest(data) %>% 
-#   dplyr::mutate(DO_Flux_TRUE = DO_Slope  - DO_Flux) %>% 
+# Exp1_DO_model %>% select(ID:DO_Slope)%>%
+#   inner_join(DO_Flux %>% select(-DO_Flux_mean, -DO_Flux_sd), by = c("ID", "Hz", "Light")) %>%
+#   tidyr::unnest(data) %>%
+#   dplyr::mutate(DO_Flux_TRUE = DO_Slope  - DO_Flux) %>%
 #   ggplot() +
 #   geom_point(aes(x=Elapsed_time, y=DO_Flux_TRUE,color=ID)) +
 #   geom_hline(yintercept = 0) +
@@ -407,20 +408,20 @@ fg_Photosynthesis = ggplot(Photosynthesis)+
 #総光合成速度の算出:kによる補正あり
 bolzmann = 8.617e-5
 
-RP = Exp1_DO_offset_Flux_model %>% 
+RP = Exp1_DO_offset_Flux_model %>%
   ungroup() %>%
-  filter(Light == FALSE) %>% 
+  filter(Light == FALSE) %>%
   mutate(K0 = mean(Temp_mean) + 273.15,
-         K = Temp_mean + 273.15, 
-         invK = (1 / K0 * bolzmann - 1 / K * bolzmann), 
+         K = Temp_mean + 273.15,
+         invK = (1 / K0 * bolzmann - 1 / K * bolzmann),
          Respration_k_WW = -DO_Slope_WW,
-         slresp = scale(log(Respration_k_WW), scale = F)) %>% 
+         slresp = scale(log(Respration_k_WW), scale = F)) %>%
   return()
 
 model = lm(slresp ~ invK, data = RP) %>% summary()
-Ea = model$coefficients %>% 
-  as_tibble(rownames = "coefficient") %>% 
-  filter(coefficient == "invK") %>% 
+Ea = model$coefficients %>%
+  as_tibble(rownames = "coefficient") %>%
+  filter(coefficient == "invK") %>%
   pull(Estimate)
 
 Ea_sub = 0.65
@@ -436,20 +437,20 @@ RP %>%
   geom_smooth(aes(x = Hz, y =-Respration_k_WW_temp, color = "Respration_k_WW_temp"), method = "loess", span = 1)
 
 
-NP = Exp1_DO_offset_Flux_model %>% 
+NP = Exp1_DO_offset_Flux_model %>%
   ungroup() %>%
-  filter(Light == TRUE) %>% 
+  filter(Light == TRUE) %>%
   mutate(K0 = mean(Temp_mean) + 273.15,
-         K = Temp_mean + 273.15, 
-         invK = (1 / K0 * bolzmann - 1 / K * bolzmann), 
+         K = Temp_mean + 273.15,
+         invK = (1 / K0 * bolzmann - 1 / K * bolzmann),
          Photosynthesis_k_WW = DO_Slope_WW,
-         slresp = scale(log(Photosynthesis_k_WW), scale = F)) %>% 
+         slresp = scale(log(Photosynthesis_k_WW), scale = F)) %>%
   return()
 
 model = lm(slresp ~ invK, data = NP) %>% summary()
-Ea = model$coefficients %>% 
-  as_tibble(rownames = "coefficient") %>% 
-  filter(coefficient == "invK") %>% 
+Ea = model$coefficients %>%
+  as_tibble(rownames = "coefficient") %>%
+  filter(coefficient == "invK") %>%
   pull(Estimate)
 
 NP %>%
@@ -489,16 +490,16 @@ ggplot(RP)+
 
 
 
-Photosynthesis_k = Exp1_DO_offset_Flux_model %>% 
-  ungroup() %>% 
+Photosynthesis_k = Exp1_DO_offset_Flux_model %>%
+  ungroup() %>%
   select(Hz, Density, WW_sum, Light, DO_Slope) %>%
-  tidyr::spread(key = Light, value = DO_Slope) %>% 
-  rename(Respiration_k = 'FALSE', Photosynthesis_net_k = 'TRUE') %>% 
+  tidyr::spread(key = Light, value = DO_Slope) %>%
+  rename(Respiration_k = 'FALSE', Photosynthesis_net_k = 'TRUE') %>%
   mutate(Respiration_k = Respiration_k,
          Photosynthesis_gross_k = Photosynthesis_net_k - Respiration_k,
          Respiration_k_WW = Respiration_k / WW_sum,
          Photosynthesis_net_k_WW = Photosynthesis_net_k / WW_sum,
-         Photosynthesis_gross_k_WW = Photosynthesis_gross_k / WW_sum) %>% 
+         Photosynthesis_gross_k_WW = Photosynthesis_gross_k / WW_sum) %>%
   mutate_at(.vars = c("Respiration_k", "Photosynthesis_gross_k", "Photosynthesis_net_k", "Respiration_k_WW", "Photosynthesis_net_k_WW", "Photosynthesis_gross_k_WW"), .funs = function(x){x*V})
 
 
