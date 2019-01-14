@@ -10,7 +10,7 @@ output:
     fig_caption: yes
     highlight: tango
     includes:
-      in_header : ~/.latex_preambles/preamble.tex
+      in_header : latex_preambles/preamble.tex
     latex_engine: xelatex
     extra_dependencies: subfig
 fontsize: 10pt
@@ -39,6 +39,10 @@ set.seed(2019)
 ```
 
 \pagebreak
+
+**Important: 02_16_41_H was removed because the mean velocity is 1/10 
+of the mean velocites for the M and L data. This must be measurement
+error, so it will not be included in the following analyses.**
 
 # Introduction
 
@@ -244,6 +248,18 @@ out = read_csv("Modified_Data/vector_all.csv",
 #   slice(1:2000)
 ```
 
+## Remove erroneous data
+
+Removing the 02_16_41_H dataset.
+
+```{r}
+out = 
+  out %>% 
+  filter(!(Hz == 2 & Depth == 16 & Distance == 41 &
+             str_detect(Density, "H")))
+```
+
+
 # Declare some functions
 
 Functions for data processing. 
@@ -327,10 +343,10 @@ run_analysis = function(HSIZE, out, testrun = TRUE) {
   quadrant_analysis = 
     quadrant_analysis_function(H = HSIZE)
   if(testrun) {
-    out = out %>% slice(1:6)
+    out2 = out %>% mutate(data = map(data, . %>% slice(1000:1999)))
   }
   dset =
-    out %>% ungroup() %>% 
+    out2 %>% ungroup() %>% 
     mutate(Position = 
              case_when((Depth > 13) ~ 1,
                        (Depth >= 7 & 
@@ -843,11 +859,11 @@ out =
 ```
 
 ```{r quadrat, cache = TRUE}
-data_0 = run_analysis(HSIZE = 0, out = out, testrun = FALSE)
-data_1 = run_analysis(HSIZE = 1, out = out, testrun = FALSE)
-data_2 = run_analysis(HSIZE = 2, out = out, testrun = FALSE)
-data_3 = run_analysis(HSIZE = 3, out = out, testrun = FALSE)
-data_4 = run_analysis(HSIZE = 4, out = out, testrun = FALSE)
+data_0 = run_analysis(HSIZE = 0, out = out, testrun = TRUE)
+data_1 = run_analysis(HSIZE = 1, out = out, testrun = TRUE)
+data_2 = run_analysis(HSIZE = 2, out = out, testrun = TRUE)
+data_3 = run_analysis(HSIZE = 3, out = out, testrun = TRUE)
+data_4 = run_analysis(HSIZE = 4, out = out, testrun = TRUE)
 ```
 
 \clearpage

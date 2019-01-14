@@ -1,0 +1,85 @@
+% All-purpose latex preamble
+% Need these for Japanese
+\usepackage{xeCJK}
+\ifxetex
+  \usepackage{letltxmacro}
+  \setlength{\XeTeXLinkMargin}{1pt}
+  \LetLtxMacro\SavedIncludeGraphics\includegraphics
+  \def\includegraphics#1#{% #1 catches optional stuff (star/opt. arg.)
+    \IncludeGraphicsAux{#1}%
+  }%
+  \newcommand*{\IncludeGraphicsAux}[2]{%
+    \XeTeXLinkBox{%
+      \SavedIncludeGraphics#1{#2}%
+    }%
+  }%
+\fi
+
+% Setup Japanese Fonts
+\setCJKmainfont{Noto Sans CJK JP}
+\setCJKsansfont{Noto Sans CJK JP}
+\setromanfont[Mapping=tex-text]{Noto Serif}
+\setsansfont[Scale=MatchLowercase,Mapping=tex-text]{Noto Sans}
+\usepackage{sourcecodepro}
+
+% See the next url for why the following is needed.
+% https://tex.stackexchange.com/questions/8351/what-do-makeatletter-and-makeatother-do
+\makeatletter
+\defaultfontfeatures[\ttfamily] {
+  Numbers   = \sourcecodepro@figurestyle ,
+  Scale     = \SourceCodePro@scale ,
+  Extension = .otf
+  }
+% Setup SourceCodePro as the monospace font, need to set it up
+% like this, otherwise the quotation marks are strange looking.
+\setmonofont[ UprightFont    = *-\sourcecodepro@regstyle ,
+              ItalicFont     = *-\sourcecodepro@regstyle It ,
+              BoldFont       = *-\sourcecodepro@boldstyle ,
+              BoldItalicFont = *-\sourcecodepro@boldstyle It,
+              Scale=MatchLowercase] {SourceCodePro}
+\makeatother
+
+% 日本語を含む段落を行分割するための設定
+\XeTeXlinebreaklocale "ja"
+
+% 簡易レイアウト設定
+\DeclareTextCommand{\nobreakspace}{T1}{\leavevmode\nobreak\ }
+\setlength{\parindent}{1em}
+\mathchardef\mhyphen="2D
+
+% For tables
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{pdflscape}
+\usepackage{float}
+
+
+% Redefine the figure environment so that the position is
+% always H
+\let\origfigure\figure
+\let\endorigfigure\endfigure
+\renewenvironment{figure}[1][2] {
+    \expandafter\origfigure\expandafter[H]
+} {
+    \endorigfigure
+}
+
+% To control figure placement.
+% see https://robjhyndman.com/hyndsight/latex-floats/
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\topfraction}{0.8}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\floatpagefraction}{0.75}
+
+%  Define Headers and Footers
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\fancypagestyle{plain}{%
+  \renewcommand{\headrulewidth}{0pt}%
+  \fancyhf{}%
+  \fancyhead[R]{\thepage}
+  \setlength\footskip{0pt}
+}
+\pagestyle{plain}
+
+%\pagenumbering{gobble} % Prevent pagenmumbers
