@@ -1,4 +1,4 @@
-# Ejectio and sweep analysis
+# Ejection and sweep analysis
 # 2018 Dataset
 
 This data is the velocity data for the recirculating flow chamber
